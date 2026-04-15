@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 
-<world name="world_my_project" gravity="0.0 0.0 -1.0">
+<world name="world_stradibot" gravity="0.0 0.0 -1.0">
 
 	<robot name="panda_arm_hand">
 		<model dir="${CS225A_URDF_FOLDER}/panda" path="panda_arm_hand.urdf"
