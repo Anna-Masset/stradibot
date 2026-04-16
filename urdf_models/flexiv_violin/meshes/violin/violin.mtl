@@ -1,0 +1,63 @@
+# Blender 4.4.3 MTL File: 'None'
+# www.blender.org
+
+newmtl blue
+Ns 10.000005
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 1
+map_Kd Violin/oakply1.jpg
+
+newmtl bok
+Ns 77.639305
+Ka 1.000000 1.000000 1.000000
+Ks 0.034300 0.034300 0.034300
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd Violin/oakply2.jpg
+
+newmtl niz
+Ns 77.639305
+Ka 1.000000 1.000000 1.000000
+Ks 0.047600 0.047600 0.047600
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd Violin/back.jpg
+
+newmtl standart_metal
+Ns 43.000011
+Ka 1.000000 1.000000 1.000000
+Ks 0.666000 0.666000 0.666000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd Violin/saif met.jpg
+map_Bump -bm 0.300000 Violin/saif met.jpg
+
+newmtl verh
+Ns 77.639305
+Ka 1.000000 1.000000 1.000000
+Ks 0.034300 0.034300 0.034300
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd Violin/front.jpg
+
+newmtl wood
+Ns 70.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.630000 0.630000 0.630000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd Violin/Tile 30s.jpg

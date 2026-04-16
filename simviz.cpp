@@ -38,11 +38,11 @@ VectorXd ui_torques;
 mutex mutex_torques, mutex_update;
 
 // specify urdf and robots
-static const string robot_name = "panda_arm_hand";
+static const string robot_name = "flexiv";
 static const string camera_name = "camera_fixed";
 
 // dynamic objects information
-const vector<std::string> object_names = {"Ball"};
+const vector<std::string> object_names = {};
 vector<Affine3d> object_poses;
 vector<VectorXd> object_velocities;
 const int n_objects = object_names.size();
@@ -52,9 +52,15 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim);
 
 int main()
 {
-	SaiModel::URDF_FOLDERS["CS225A_URDF_FOLDER"] = string(CS225A_URDF_FOLDER);
-	static const string robot_file = string(CS225A_URDF_FOLDER) + "/panda/panda_arm_hand.urdf";
-	static const string world_file = string(STRADIBOT_FOLDER) + "/world_stradibot.urdf";
+	// SaiModel::URDF_FOLDERS["CS225A_URDF_FOLDER"] = string(CS225A_URDF_FOLDER);
+	// static const string robot_file = string(CS225A_URDF_FOLDER) + "/panda_violin/panda_arm.urdf";
+	// static const string world_file = string(STRADIBOT_FOLDER) + "/world_stradibot.urdf";
+	// std::cout << "Loading URDF world model file: " << world_file << endl;
+
+	SaiModel::URDF_FOLDERS["STRADIBOT_FOLDER"] = string(STRADIBOT_FOLDER);
+
+	static const string robot_file = string(STRADIBOT_FOLDER) + "/urdf_models/flexiv_violin/flexiv.urdf";
+	static const string world_file = string(STRADIBOT_FOLDER) + "/urdf_models/world_stradibot.urdf";
 	std::cout << "Loading URDF world model file: " << world_file << endl;
 
 	// start redis client
@@ -75,6 +81,9 @@ int main()
 	// robot->setDq();
 	robot->updateModel();
 	ui_torques = VectorXd::Zero(robot->dof());
+
+	// enable ui force interaction
+	graphics->addUIForceInteraction(robot_name);
 
 	// load simulation world
 	auto sim = std::make_shared<SaiSimulation::SaiSimulation>(world_file, false);
