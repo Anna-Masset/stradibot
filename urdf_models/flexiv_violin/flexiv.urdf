@@ -20,7 +20,7 @@
     <!-- <collision>
       <origin rpy="0 0 0" xyz="0 0 0" />
       <geometry>
-        <mesh filename="meshes/rizon4/collision/link0.stl" />
+        <mesh filename="meshes/rizon4s/collision/link0.stl" />
       </geometry>
     </collision> -->
   </link>
@@ -40,14 +40,14 @@
     <visual name="ring">
       <origin rpy="0 0 0" xyz="0 0 -0.0025" />
       <geometry>
-        <mesh filename="meshes/rizon4/visual/ring.obj" scale="0.062 0.062 0.002" />
+        <mesh filename="meshes/rizon4s/visual/ring.obj" scale="0.062 0.062 0.002" />
       </geometry>
       <material name="rizon_blue" />
     </visual>
     <!-- <collision>
       <origin rpy="0 0 0" xyz="0 0 0" />
       <geometry>
-        <mesh filename="meshes/rizon4/collision/link1.stl" />
+        <mesh filename="meshes/rizon4s/collision/link1.stl" />
       </geometry>
     </collision> -->
   </link>
@@ -67,14 +67,14 @@
     <visual name="ring">
       <origin rpy="1.5707963 0 0" xyz="0 -0.0025 0" />
       <geometry>
-        <mesh filename="meshes/rizon4/visual/ring.obj" scale="0.062 0.062 0.002" />
+        <mesh filename="meshes/rizon4s/visual/ring.obj" scale="0.062 0.062 0.002" />
       </geometry>
       <material name="rizon_blue" />
     </visual>
     <!-- <collision>
       <origin rpy="0 0 0" xyz="0 0 0" />
       <geometry>
-        <mesh filename="meshes/rizon4/collision/link2.stl" />
+        <mesh filename="meshes/rizon4s/collision/link2.stl" />
       </geometry>
     </collision> -->
   </link>
@@ -94,14 +94,14 @@
     <visual name="ring">
       <origin rpy="0 0 0" xyz="0 0 -0.0025" />
       <geometry>
-        <mesh filename="meshes/rizon4/visual/ring.obj" scale="0.051 0.051 0.002" />
+        <mesh filename="meshes/rizon4s/visual/ring.obj" scale="0.051 0.051 0.002" />
       </geometry>
       <material name="rizon_blue" />
     </visual>
     <!-- <collision>
       <origin rpy="0 0 0" xyz="0 0 0" />
       <geometry>
-        <mesh filename="meshes/rizon4/collision/link3.stl" />
+        <mesh filename="meshes/rizon4s/collision/link3.stl" />
       </geometry>
     </collision> -->
   </link>
@@ -121,14 +121,14 @@
     <visual name="ring">
       <origin rpy="1.5707963 0 0" xyz="0 -0.0025 0" />
       <geometry>
-        <mesh filename="meshes/rizon4/visual/ring.obj" scale="0.051 0.051 0.002" />
+        <mesh filename="meshes/rizon4s/visual/ring.obj" scale="0.051 0.051 0.002" />
       </geometry>
       <material name="rizon_blue" />
     </visual>
     <!-- <collision>
       <origin rpy="0 0 0" xyz="0 0 0" />
       <geometry>
-        <mesh filename="meshes/rizon4/collision/link4.stl" />
+        <mesh filename="meshes/rizon4s/collision/link4.stl" />
       </geometry>
     </collision> -->
   </link>
@@ -148,14 +148,14 @@
     <visual name="ring">
       <origin rpy="0 0 0" xyz="0 0 -0.0025" />
       <geometry>
-        <mesh filename="meshes/rizon4/visual/ring.obj" scale="0.051 0.051 0.002" />
+        <mesh filename="meshes/rizon4s/visual/ring.obj" scale="0.051 0.051 0.002" />
       </geometry>
       <material name="rizon_blue" />
     </visual>
     <!-- <collision>
       <origin rpy="0 0 0" xyz="0 0 0" />
       <geometry>
-        <mesh filename="meshes/rizon4/collision/link5.stl" />
+        <mesh filename="meshes/rizon4s/collision/link5.stl" />
       </geometry>
     </collision> -->
   </link>
@@ -175,14 +175,14 @@
     <visual name="ring">
       <origin rpy="1.5707963 0 0" xyz="0 -0.0025 0" />
       <geometry>
-        <mesh filename="meshes/rizon4/visual/ring.obj" scale="0.051 0.051 0.002" />
+        <mesh filename="meshes/rizon4s/visual/ring.obj" scale="0.051 0.051 0.002" />
       </geometry>
       <material name="rizon_blue" />
     </visual>
     <!-- <collision>
       <origin rpy="0 0 0" xyz="0 0 0" />
       <geometry>
-        <mesh filename="meshes/rizon4/collision/link6.stl" />
+        <mesh filename="meshes/rizon4s/collision/link6.stl" />
       </geometry>
     </collision> -->
   </link>
@@ -195,21 +195,21 @@
     <visual name="shell">
       <origin rpy="0 0 0" xyz="0 0 0" />
       <geometry>
-        <mesh filename="meshes/rizon4/visual/link7.obj" />
+        <mesh filename="meshes/rizon4s/visual/link7.obj" />
       </geometry>
       <material name="rizon_light_grey" />
     </visual>
     <visual name="ring">
       <origin rpy="0 0 0" xyz="0 0 -0.0025" />
       <geometry>
-        <mesh filename="meshes/rizon4/visual/ring.obj" scale="0.051 0.051 0.002" />
+        <mesh filename="meshes/rizon4s/visual/ring.obj" scale="0.051 0.051 0.002" />
       </geometry>
       <material name="rizon_blue" />
     </visual>
     <!-- <collision>
       <origin rpy="0 0 0" xyz="0 0 0" />
       <geometry>
-        <mesh filename="meshes/rizon4/collision/link7.stl" />
+        <mesh filename="meshes/rizon4s/collision/link7.stl" />
       </geometry>
     </collision> -->
   </link>
@@ -297,7 +297,7 @@
   <joint name="joint7" type="revolute">
     <parent link="link6" />
     <child link="link7" />
-    <origin rpy="0.0 -1.5707963478683205 0.0" xyz="-0.055 0.07 0.11" />
+    <origin rpy="0.0 -1.5707963478683205 0.0" xyz="-0.015 0.07 0.11" />
     <axis xyz="0 0 1" />
     <limit effort="39" lower="-2.9671" upper="2.9671" velocity="4.8869" />
   </joint>
@@ -307,8 +307,8 @@
     <origin rpy="0.0 0.0 -3.141592653589793" xyz="0.0 0.0 0.081" />
   </joint>
   <joint name="bow_joint" type="fixed">
-      <origin rpy="-1.57 0 1.57" xyz="0.35 0 0.2"/>
-      <parent link="link7"/>
+      <origin rpy="-1.57 0 -1.57" xyz="-0.35 0 0.1"/>
+      <parent link="flange"/>
       <child link="bow"/>
   </joint>
 
