@@ -27,8 +27,14 @@
 		</collision>
 	</static_object>
 
-	<static_object name="Violin">
-		<origin xyz="0.7 0.0 0.1" rpy="1.57 0 1.57" />
+	<robot name="violin">
+		<model dir="${STRADIBOT_FOLDER}/urdf_models/flexiv_violin" path="violin.urdf"
+			name="violin" />
+		<origin xyz="0.7 0.0 0.05" rpy="0 0 0" />
+	</robot>
+
+	<!-- <static_object name="Violin">
+		<origin xyz="0.7 0.0 0.0" rpy="1.57 0 1.57" />
 		<visual>
 			<origin xyz="0 0 0" rpy="0 0 0" />
 			<geometry>
@@ -38,11 +44,11 @@
 		<collision>
 			<origin xyz="0 0 0" rpy="0 0 0" />
 			<geometry>
-				<!-- <box size="0.3 0.1 0.05" /> -->
+				 <box size="0.3 0.1 0.05" /> 
 				<mesh filename="${STRADIBOT_FOLDER}/urdf_models/flexiv_violin/meshes/violin/collision_violin.obj" scale="0.001 0.001 0.001"/>
 			</geometry>
 		</collision>
-	</static_object>
+	</static_object> -->
 
 	<!-- <dynamic_object name="Ball">
 		<origin xyz="0.7 0.0 0.5" rpy="0 0 0" />

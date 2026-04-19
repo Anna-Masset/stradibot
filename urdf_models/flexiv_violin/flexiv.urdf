@@ -206,12 +206,12 @@
       </geometry>
       <material name="rizon_blue" />
     </visual>
-    <!-- <collision>
+    <collision>
       <origin rpy="0 0 0" xyz="0 0 0" />
       <geometry>
         <mesh filename="meshes/rizon4s/collision/link7.stl" />
       </geometry>
-    </collision> -->
+    </collision>
   </link>
   <link name="flange">
    <inertial>
@@ -223,8 +223,8 @@
   <link name="bow">
       <inertial>
         <origin xyz="0 0 0" rpy="0 -0 0" />
-        <mass value="1.0" />
-        <inertia ixx="0.1" iyy="0.1" izz="0.25" ixy="0" ixz="0" iyz="0" />
+        <mass value="0.06" />
+        <inertia ixx="1e-6" iyy="0.002" izz="0.002" ixy="0" ixz="0" iyz="0" />
       </inertial>
       <visual>
         <geometry>

@@ -27,6 +27,7 @@ int main()
 	// Location of URDF files specifying world and robot information
 	// static const string robot_file = string(CS225A_URDF_FOLDER) + "/panda_violin/panda_arm.urdf";
 	static const string robot_file = string(STRADIBOT_FOLDER) + "/urdf_models/flexiv_violin/flexiv.urdf";
+	const string robot_name = "flexiv";
 
 	// start redis client
 	auto redis_client = SaiCommon::RedisClient();
@@ -49,13 +50,16 @@ int main()
 	MatrixXd N_prec = MatrixXd::Identity(dof, dof);
 
 	// arm task
-	const string control_link = "link7";
+	const string control_link = "bow";
 	const Vector3d control_point = Vector3d(0, 0, 0.17);
 	Affine3d compliant_frame = Affine3d::Identity();
 	compliant_frame.translation() = control_point;
 	auto pose_task = std::make_shared<SaiPrimitives::MotionForceTask>(robot, control_link, compliant_frame);
+	pose_task->parametrizeForceMotionSpaces(1, Vector3d::UnitZ());
+	pose_task->parametrizeMomentRotMotionSpaces(0);
 	pose_task->setPosControlGains(400, 40, 0);
 	pose_task->setOriControlGains(400, 40, 0);
+	pose_task->setForceControlGains(0.7, 10.0, 1.3);
 
 	Vector3d ee_pos;
 	Matrix3d ee_ori;
@@ -69,6 +73,8 @@ int main()
 	joint_task->setGoalPosition(q_desired);
 
 	VectorXd ee_pos_desired(3);
+	MatrixXd ee_ori_desired = robot->rotation(control_link);
+	VectorXd ee_force_desired(3);
 
 	// create a loop timer
 	runloop = true;
@@ -86,8 +92,12 @@ int main()
 		robot->updateModel();
 
 		// update goal position and orientation
-		ee_pos_desired << 0.5, 0, 0.2 + 0.1 * sin(time);
+		ee_pos_desired << 0.5 + 0.1 * cos(time), 0.0, 0.0;
+		ee_force_desired << 0.0, 0.0, -5.0;
+
 		pose_task->setGoalPosition(ee_pos_desired);
+		pose_task->setGoalOrientation(ee_ori_desired);
+		pose_task->setGoalForce(ee_force_desired);
 
 		// update task model
 		N_prec.setIdentity();

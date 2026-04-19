@@ -1,0 +1,153 @@
+<?xml version='1.0' encoding='utf-8'?>
+
+<robot name="violin">
+
+  <link name="base_link">
+    <inertial>
+      <mass value="3.7" />
+      <origin rpy="0 0 0" xyz="0.0 -0.0 0" />
+      <inertia ixx="0.02" ixy="0.0" ixz="0.0" iyy="0.02" iyz="0.0" izz="0.02" />
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <geometry>
+        <box size="0.3 0.5 0.05" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <geometry>
+        <box size="0.3 0.5 0.05" />
+      </geometry>
+    </collision>
+  </link>
+
+    <link name="cord1">
+    <inertial>
+      <mass value="0.1" />
+      <origin rpy="0 0 0" xyz="0.0 0.0 0.0" />
+      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001" />
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <geometry>
+        <cylinder radius="0.005" length="1" />
+      </geometry>
+      <material name="material_red">
+        <color rgba="1.0 0.1 0.1 1.0" />
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <geometry>
+        <cylinder radius="0.005" length="1" />
+      </geometry>
+    </collision>
+    </link>
+
+    <link name="cord2">
+    <inertial>
+      <mass value="0.1" />
+      <origin rpy="0 0 0" xyz="0.0 0.0 0.0" />
+      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001" />
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <geometry>
+        <cylinder radius="0.005" length="1" />
+      </geometry>
+      <material name="material_red">
+        <color rgba="1.0 0.1 0.1 1.0" />
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <geometry>
+        <cylinder radius="0.005" length="1" />
+      </geometry>
+    </collision>
+    </link>
+
+    <link name="cord3">
+    <inertial>
+      <mass value="0.1" />
+      <origin rpy="0 0 0" xyz="0.0 0.0 0.0" />
+      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001" />
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <geometry>
+        <cylinder radius="0.005" length="1" />
+      </geometry>
+      <material name="material_red">
+        <color rgba="1.0 0.1 0.1 1.0" />
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <geometry>
+        <cylinder radius="0.005" length="1" />
+      </geometry>
+    </collision>
+    </link>
+
+    <link name="cord4">
+    <inertial>
+      <mass value="0.1" />
+      <origin rpy="0 0 0" xyz="0.0 0.0 0.0" />
+      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001" />
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <geometry>
+        <cylinder radius="0.005" length="1" />
+      </geometry>
+      <material name="material_red">
+        <color rgba="1.0 0.1 0.1 1.0" />
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <geometry>
+        <cylinder radius="0.005" length="1" />
+      </geometry>
+    </collision>
+    </link>
+  
+  <joint name="joint1" type="fixed">
+    <parent link="base_link" />
+    <child link="cord1" />
+    <origin rpy="1.57 0.0 0.0" xyz="-0.02 0.0 0.12" />
+    <axis xyz="0 0 1" />
+    <limit effort="123" lower="-2.7925" upper="2.7925" velocity="2.0944" />
+    <calibration rising="0"/>
+  </joint>
+
+  <joint name="joint2" type="fixed">
+    <parent link="base_link" />
+    <child link="cord2" />
+    <origin rpy="1.57 0.0 0.0" xyz="-0.06 0.0 0.1" />
+    <axis xyz="0 0 1" />
+    <limit effort="123" lower="-2.7925" upper="2.7925" velocity="2.0944" />
+    <calibration rising="0"/>
+  </joint>
+
+  <joint name="joint3" type="fixed">
+    <parent link="base_link" />
+    <child link="cord3" />
+    <origin rpy="1.57 0.0 0.0" xyz="0.02 0.0 0.12" />
+    <axis xyz="0 0 1" />
+    <limit effort="123" lower="-2.7925" upper="2.7925" velocity="2.0944" />
+    <calibration rising="0"/>
+  </joint>
+
+  <joint name="joint4" type="fixed">
+    <parent link="base_link" />
+    <child link="cord4" />
+    <origin rpy="1.57 0.0 0.0" xyz="0.06 0.0 0.1" />
+    <axis xyz="0 0 1" />
+    <limit effort="123" lower="-2.7925" upper="2.7925" velocity="2.0944" />
+    <calibration rising="0"/>
+  </joint>
+  
+</robot>
