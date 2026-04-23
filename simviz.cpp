@@ -14,7 +14,6 @@
 #include <thread>
 #include <fstream>
 #include <filesystem>
-#include <iostream>
 #include <vector>
 #include <typeinfo>
 #include <random>
@@ -40,59 +39,45 @@ using namespace chai3d;
 
 // --- adding the sounds into the simulation ---
 // declaring the variables for the sound
-cStereoMode stereoMode = C_STEREO_ACTIVE;
-cAudioDevice *audioDevice; // NB: could add audiobuffer to save the sound
-cAudioBuffer *violinToneBuffer;
-cAudioSource *violinToneSources[4];
-std::vector<short> violinToneSamples;
+// cStereoMode stereoMode = C_STEREO_ACTIVE;
+// cAudioDevice *audioDevice;
+// cAudioSource *violinToneSources[4];
+// std::array<bool, 4> audio_source_active = {false, false, false, false};
+// std::array<int, 4> audio_source_cooldown_frames = {0, 0, 0, 0};
+// std::array<std::vector<unsigned char>, 4> raw_audio_storage;
 
-struct AudioState
-{
-	double frequency_hz = 440.0;
-	double gain = 0.0;
-	Eigen::Vector3d position = Eigen::Vector3d::Zero();
-	bool in_contact = false;
-};
+// struct AudioState
+// {
+// 	double frequency_hz = 440.0;
+// 	double gain = 0.0;
+// 	Eigen::Vector3d position = Eigen::Vector3d::Zero();
+// 	bool in_contact = false;
+// };
 
-mutex mutex_audio;
+// mutex mutex_audio;
 
-static constexpr double kAudioSampleRate = 48000.0;
-static constexpr double kWaveformBaseFrequencyHz = 440.0;
-static constexpr double kMinAudibleFrequencyHz = 80.0;
-static constexpr double kMaxAudibleFrequencyHz = 2000.0;
-static constexpr double kTangentialForceThresholdN = 0.15;
-static constexpr double kGainForceScale = 0.08;
-static constexpr double kAudioGainMax = 0.35;
+// // Simplified constraints for debugging
+// static constexpr int kRetriggerDebounceFrames = 8;
+// static constexpr double kConstantTestVolume = 0.15; // Safe volume to prevent clipping
+// static constexpr double kMinAudibleFrequencyHz = 80.0;
+// static constexpr double kMaxAudibleFrequencyHz = 1200.0;
+// static constexpr double kFrequencyMatchToleranceHz = 120.0;
+// static constexpr double kTangentialForceThresholdN = 0.05;
 
-struct StringAudioConfig
-{
-	std::string link_name;
-	double open_string_frequency_hz;
-};
+// struct StringAudioConfig
+// {
+// 	std::string link_name;
+// 	double open_string_frequency_hz;
+// };
 
-static const std::array<StringAudioConfig, 4> kStringConfigs = {{
-	{"cord1", 196.00}, // G3
-	{"cord2", 293.66}, // D4
-	{"cord3", 440.00}, // A4
-	{"cord4", 659.25}, // E5
-}};
+// static const std::array<StringAudioConfig, 4> kStringConfigs = {{
+// 	{"string1", 196.00}, // G3
+// 	{"string2", 293.66}, // D4
+// 	{"string3", 440.00}, // A4
+// 	{"string4", 659.25}, // E5
+// }};
 
-std::array<AudioState, 4> audio_states;
-
-static std::vector<short> generateSineWaveSamples(double sample_rate,
-												  double frequency_hz,
-												  double duration_sec)
-{
-	const int sample_count = static_cast<int>(sample_rate * duration_sec);
-	std::vector<short> samples(sample_count);
-	for (int i = 0; i < sample_count; ++i)
-	{
-		const double time = static_cast<double>(i) / sample_rate;
-		const double value = sin(2.0 * M_PI * frequency_hz * time);
-		samples[i] = static_cast<short>(32767.0 * 0.35 * value);
-	}
-	return samples;
-}
+// std::array<AudioState, 4> audio_states;
 
 // mutex and globals
 VectorXd ui_torques;
@@ -106,11 +91,16 @@ static const string sensor_link_name = "link7";
 static const string contact_link_name = "bow";
 
 // dynamic objects information
-const vector<std::string>
-	object_names = {};
+const vector<std::string> object_names = {};
 vector<Affine3d> object_poses;
 vector<VectorXd> object_velocities;
 const int n_objects = object_names.size();
+
+// --- Audio Helper Functions Declarations ---
+// void initializeAudio(std::shared_ptr<SaiGraphics::SaiGraphics> graphics);
+// void updateAudioPlayback();
+// void updateAudioPhysics(std::shared_ptr<SaiSimulation::SaiSimulation> sim);
+// void cleanupAudio();
 
 // simulation thread
 void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim);
@@ -119,12 +109,6 @@ unsigned long long simulation_counter = 0;
 
 int main()
 {
-
-	// SaiModel::URDF_FOLDERS["CS225A_URDF_FOLDER"] = string(CS225A_URDF_FOLDER);
-	// static const string robot_file = string(CS225A_URDF_FOLDER) + "/panda_violin/panda_arm.urdf";
-	// static const string world_file = string(STRADIBOT_FOLDER) + "/world_stradibot.urdf";
-	// std::cout << "Loading URDF world model file: " << world_file << endl;
-
 	SaiModel::URDF_FOLDERS["STRADIBOT_FOLDER"] = string(STRADIBOT_FOLDER);
 
 	static const string robot_file = string(STRADIBOT_FOLDER) + "/urdf_models/flexiv_violin/flexiv.urdf";
@@ -147,10 +131,8 @@ int main()
 	// load robots
 	auto robot = std::make_shared<SaiModel::SaiModel>(robot_file, false);
 	auto violin = std::make_shared<SaiModel::SaiModel>(violin_file, false);
-	// robot->setQ();
-	// robot->setDq();
 	robot->updateModel();
-	violin
+	violin->updateModel();
 	ui_torques = VectorXd::Zero(robot->dof());
 
 	// enable ui force interaction
@@ -160,6 +142,9 @@ int main()
 	auto sim = std::make_shared<SaiSimulation::SaiSimulation>(world_file, false);
 	sim->setJointPositions(robot_name, robot->q());
 	sim->setJointVelocities(robot_name, robot->dq());
+	Vector3d control_position = redis_client.getEigen(CONTROL_POSITION_KEY);
+	Affine3d control_pose = Affine3d::Identity();
+	control_pose.translation() = control_position;
 
 	// fill in object information
 	for (int i = 0; i < n_objects; ++i)
@@ -169,10 +154,7 @@ int main()
 	}
 
 	// --- FORCE SENSOR AT EE ---
-	// add simulated force sensor
 	Eigen::Affine3d T_link_sensor = Eigen::Affine3d::Identity();
-	// T_link_sensor.translate(Eigen::Vector3d(0.0, 0.0, 0.0));
-	// T_link_sensor.rotate(Eigen::AngleAxisd(M_PI, Eigen::Vector3d::UnitX()));
 	double sensor_filter_cutoff_freq = 0.5;
 	sim->addSimulatedForceSensor(robot_name, sensor_link_name, T_link_sensor,
 								 sensor_filter_cutoff_freq);
@@ -184,14 +166,12 @@ int main()
 	}
 
 	// ---- CONTACT FORCE ---
-
 	// set simulation parameters
 	sim->setCollisionRestitution(0.5);
 	sim->setCoeffFrictionStatic(0.0);
 	sim->setCoeffFrictionDynamic(0.0);
 
 	/*------- Set up visualization -------*/
-	// init redis client values
 	Vector3d contact_pos = Vector3d::Zero();
 	Vector3d contact_force = Vector3d::Zero();
 	auto contact_list = sim->getContactList(robot_name, contact_link_name);
@@ -201,38 +181,22 @@ int main()
 		contact_force = contact_list[0].second;
 	}
 
+	// ---- REDIS KEYS ----
+	int key_pressed = 0;
+
 	redis_client.setEigen(JOINT_ANGLES_KEY, robot->q());
 	redis_client.setEigen(JOINT_VELOCITIES_KEY, robot->dq());
 	redis_client.setEigen(JOINT_TORQUES_COMMANDED_KEY, 0 * robot->q());
 	redis_client.setEigen(CONTACT_POINT_FORCE_KEY, contact_force);
 	redis_client.setEigen(CONTACT_POINT_POSITION_KEY, contact_pos);
+	redis_client.setDouble(KEYBOARD_INPUT_KEY, key_pressed);
 
 	//--------------------------------------------------------------------------
-	// TRYING TO ADD SOUND - START
+	// ADD SOUND
 	//--------------------------------------------------------------------------
-	audioDevice = new cAudioDevice();
-	graphics->attachAudioDeviceToCamera(camera_name, audioDevice);
-	violinToneSamples =
-		generateSineWaveSamples(kAudioSampleRate, kWaveformBaseFrequencyHz, 1.0);
-	violinToneBuffer = new cAudioBuffer();
-	violinToneBuffer->setup(
-		reinterpret_cast<unsigned char *>(violinToneSamples.data()),
-		static_cast<unsigned int>(violinToneSamples.size() * sizeof(short)),
-		static_cast<int>(kAudioSampleRate), false, 16);
-	for (int i = 0; i < static_cast<int>(kStringConfigs.size()); ++i)
-	{
-		violinToneSources[i] = new cAudioSource();
-		violinToneSources[i]->setAudioBuffer(violinToneBuffer);
-		violinToneSources[i]->setLoop(true);
-		violinToneSources[i]->setGain(0.0);
-		violinToneSources[i]->setPitch(
-			kStringConfigs[i].open_string_frequency_hz / kWaveformBaseFrequencyHz);
-		violinToneSources[i]->play();
-	}
+	// initializeAudio(graphics);
 
-	//--------------------------------------------------------------------------
-	// TRYING TO ADD SOUND - END
-	//--------------------------------------------------------------------------
+	// chai3d::cShapeSphere *control_sphere = graphics->createGoalSphere(control_position, 0.01, chai3d::cColorf(1.0, 0.65, 0.0), true);
 
 	// start simulation thread
 	thread sim_thread(simulation, sim);
@@ -240,7 +204,43 @@ int main()
 	// while window is open:
 	while (graphics->isWindowOpen() && fSimulationRunning)
 	{
+		control_position = redis_client.getEigen(CONTROL_POSITION_KEY);
+		control_pose = Affine3d::Identity();
+		control_pose.translation() = control_position;
+		// graphics->updateGoalSphere(control_sphere, control_position, true, false, Matrix3d::Identity());
 		graphics->updateRobotGraphics(robot_name, redis_client.getEigen(JOINT_ANGLES_KEY));
+
+		if (graphics->isKeyPressed(49)) // 1 key
+		{
+			key_pressed = 1;
+			cout << "1 key pressed" << endl;
+		}
+		else if (graphics->isKeyPressed(50)) // 2 key
+		{
+			key_pressed = 2;
+			cout << "2 key pressed" << endl;
+		}
+		else if (graphics->isKeyPressed(51)) // 3 key
+		{
+			key_pressed = 3;
+			cout << "3 key pressed" << endl;
+		}
+		else if (graphics->isKeyPressed(52)) // 4 key
+		{
+			key_pressed = 4;
+			cout << "4 key pressed" << endl;
+		}
+		else if (graphics->isKeyPressed(57)) // 9 key
+		{
+			key_pressed = 9;
+			cout << "9 key pressed" << endl;
+		}
+		else
+		{
+			key_pressed = 0;
+		}
+		redis_client.setDouble(KEYBOARD_INPUT_KEY, key_pressed);
+
 		for (const auto sensor_data : sim->getAllForceSensorData())
 		{
 			graphics->updateDisplayedForceSensor(sensor_data);
@@ -258,67 +258,29 @@ int main()
 			lock_guard<mutex> lock(mutex_torques);
 			ui_torques = graphics->getUITorques(robot_name);
 		}
-		{
-			lock_guard<mutex> lock(mutex_audio);
-			for (int i = 0; i < static_cast<int>(kStringConfigs.size()); ++i)
-			{
-				const double clamped_frequency =
-					std::clamp(audio_states[i].frequency_hz, kMinAudibleFrequencyHz,
-							   kMaxAudibleFrequencyHz);
-				violinToneSources[i]->setPitch(
-					clamped_frequency / kWaveformBaseFrequencyHz);
-				violinToneSources[i]->setGain(
-					audio_states[i].in_contact ? audio_states[i].gain : 0.0);
-				violinToneSources[i]->setSourcePos(cVector3d(
-					audio_states[i].position.x(), audio_states[i].position.y(),
-					audio_states[i].position.z()));
-				violinToneSources[i]->setSourceVel(cVector3d(0.0, 0.0, 0.0));
-			}
-		}
+
+		//--------------------------------------------------------------------------
+		// SOUND PLAYBACK UPDATE
+		//--------------------------------------------------------------------------
+		// updateAudioPlayback();
 
 		// gets the sensor measurements
-		if (simulation_counter % 100 == 0)
-		{
-			cout << "force local frame:\t"
-				 << sim->getSensedForce(robot_name, sensor_link_name).transpose()
-				 << endl;
-			cout
-				<< "force world frame:\t"
-				<< sim->getSensedForce(robot_name, sensor_link_name, false).transpose()
-				<< endl;
-			cout << "moment local frame:\t"
-				 << sim->getSensedMoment(robot_name, sensor_link_name).transpose()
-				 << endl;
-			cout << "moment world frame:\t"
-				 << sim->getSensedMoment(robot_name, sensor_link_name, false)
-						.transpose()
-				 << endl;
-			cout << endl;
-		}
-
-		// gets the contact forces
-		if (simulation_counter % 100 == 0)
-		{
-			contact_list = sim->getContactList(robot_name, contact_link_name);
-			if (!contact_list.empty())
-			{
-				contact_pos = contact_list[0].first;
-				contact_force = contact_list[0].second;
-				redis_client.setEigen(CONTACT_POINT_POSITION_KEY, contact_pos);
-				redis_client.setEigen(CONTACT_POINT_FORCE_KEY, contact_force);
-				std::cout << "contact at " << robot_name << " " << contact_link_name
-						  << std::endl;
-				int n = contact_list.size();
-				for (int i = 0; i < n; i++)
-				{
-					std::cout << "contact point " << i << " : "
-							  << contact_list[i].first.transpose() << "\n";
-					std::cout << "contact force " << i << " : "
-							  << contact_list[i].second.transpose() << "\n";
-				}
-				std::cout << endl;
-			}
-		}
+		// 	if (simulation_counter % 100 == 0)
+		// 	{
+		// 		cout << "force local frame:\t"
+		// 			 << sim->getSensedForce(robot_name, sensor_link_name).transpose()
+		// 			 << endl;
+		// 		cout << "force world frame:\t"
+		// 			 << sim->getSensedForce(robot_name, sensor_link_name, false).transpose()
+		// 			 << endl;
+		// 		cout << "moment local frame:\t"
+		// 			 << sim->getSensedMoment(robot_name, sensor_link_name).transpose()
+		// 			 << endl;
+		// 		cout << "moment world frame:\t"
+		// 			 << sim->getSensedMoment(robot_name, sensor_link_name, false).transpose()
+		// 			 << endl;
+		// 		cout << endl;
+		// 	}
 
 		simulation_counter++;
 	}
@@ -327,12 +289,7 @@ int main()
 	fSimulationRunning = false;
 	sim_thread.join();
 
-	for (int i = 0; i < static_cast<int>(kStringConfigs.size()); ++i)
-	{
-		delete violinToneSources[i];
-	}
-	delete violinToneBuffer;
-	delete audioDevice;
+	// cleanupAudio();
 
 	return 0;
 }
@@ -340,8 +297,6 @@ int main()
 //------------------------------------------------------------------------------
 void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim)
 {
-	// fSimulationRunning = true;
-
 	// create redis client
 	auto redis_client = SaiCommon::RedisClient();
 	redis_client.connect();
@@ -353,18 +308,6 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim)
 	sim->setTimestep(1.0 / sim_freq);
 	sim->enableGravityCompensation(true);
 	sim->enableJointLimits(robot_name);
-
-	std::array<double, 4> tangential_force_lowpass = {0.0, 0.0, 0.0, 0.0};
-	std::array<double, 4> previous_force_signal = {0.0, 0.0, 0.0, 0.0};
-	std::array<unsigned long long, 4> last_zero_crossing_step = {0, 0, 0, 0};
-	std::array<double, 4> estimated_frequency_hz = {
-		kStringConfigs[0].open_string_frequency_hz,
-		kStringConfigs[1].open_string_frequency_hz,
-		kStringConfigs[2].open_string_frequency_hz,
-		kStringConfigs[3].open_string_frequency_hz,
-	};
-	std::array<AudioState, 4> next_audio_states;
-	unsigned long long step_counter = 0;
 
 	while (fSimulationRunning)
 	{
@@ -379,63 +322,10 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim)
 		redis_client.setEigen(JOINT_ANGLES_KEY, sim->getJointPositions(robot_name));
 		redis_client.setEigen(JOINT_VELOCITIES_KEY, sim->getJointVelocities(robot_name));
 
-		for (int i = 0; i < static_cast<int>(kStringConfigs.size()); ++i)
-		{
-			next_audio_states[i] = AudioState();
-			next_audio_states[i].frequency_hz = estimated_frequency_hz[i];
-
-			const auto contact_list =
-				sim->getContactList(violin_name, kStringConfigs[i].link_name);
-			if (contact_list.empty())
-			{
-				previous_force_signal[i] = 0.0;
-				continue;
-			}
-
-			const Eigen::Vector3d &contact_position = contact_list[0].first;
-			const Eigen::Vector3d &contact_force = contact_list[0].second;
-
-			// First approximation: bow motion is mostly along world X.
-			const double tangential_force = contact_force.x();
-			tangential_force_lowpass[i] =
-				0.995 * tangential_force_lowpass[i] + 0.005 * tangential_force;
-			const double force_signal =
-				tangential_force - tangential_force_lowpass[i];
-
-			if ((previous_force_signal[i] <= 0.0) && (force_signal > 0.0))
-			{
-				if (last_zero_crossing_step[i] > 0)
-				{
-					const double period_steps =
-						static_cast<double>(step_counter - last_zero_crossing_step[i]);
-					if (period_steps > 1.0)
-					{
-						const double measured_frequency = sim_freq / period_steps;
-						if (measured_frequency >= kMinAudibleFrequencyHz &&
-							measured_frequency <= kMaxAudibleFrequencyHz)
-						{
-							estimated_frequency_hz[i] =
-								0.92 * estimated_frequency_hz[i] +
-								0.08 * measured_frequency;
-						}
-					}
-				}
-				last_zero_crossing_step[i] = step_counter;
-			}
-			previous_force_signal[i] = force_signal;
-
-			next_audio_states[i].frequency_hz = estimated_frequency_hz[i];
-			next_audio_states[i].gain = std::clamp(
-				kGainForceScale * std::abs(tangential_force), 0.0, kAudioGainMax);
-			next_audio_states[i].position = contact_position;
-			next_audio_states[i].in_contact =
-				(std::abs(tangential_force) > kTangentialForceThresholdN);
-		}
-
-		{
-			lock_guard<mutex> lock(mutex_audio);
-			audio_states = next_audio_states;
-		}
+		//--------------------------------------------------------------------------
+		// SOUND PHYSICS UPDATE
+		//--------------------------------------------------------------------------
+		// updateAudioPhysics(sim);
 
 		// update object information
 		{
@@ -446,10 +336,216 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim)
 				object_velocities[i] = sim->getObjectVelocity(object_names[i]);
 			}
 		}
-
-		step_counter++;
 	}
 	timer.stop();
 	cout << "\nSimulation loop timer stats:\n";
 	timer.printInfoPostRun();
 }
+
+//==============================================================================
+// AUDIO IMPLEMENTATION DETAILS
+//==============================================================================
+
+// void initializeAudio(std::shared_ptr<SaiGraphics::SaiGraphics> graphics)
+// {
+// 	audioDevice = new cAudioDevice();
+// 	graphics->attachAudioDeviceToCamera(camera_name, audioDevice);
+
+// 	std::string base_path = string(STRADIBOT_FOLDER) + "/sounds/";
+
+// 	std::string file_paths[4] = {
+// 		base_path + "string1_g3_clean_16.raw",
+// 		base_path + "string2_d4_clean_16.raw",
+// 		base_path + "string3_a4_clean_16.raw",
+// 		base_path + "string4_e5_clean_16.raw"};
+
+// 	for (int i = 0; i < static_cast<int>(kStringConfigs.size()); ++i)
+// 	{
+// 		cAudioBuffer *buffer = new cAudioBuffer();
+// 		std::ifstream file(file_paths[i], std::ios::binary | std::ios::ate);
+// 		bool buffer_loaded = false;
+// 		if (file.is_open())
+// 		{
+// 			const std::streamsize size = file.tellg();
+// 			file.seekg(0, std::ios::beg);
+// 			raw_audio_storage[i].resize(static_cast<size_t>(size));
+// 			if (file.read(reinterpret_cast<char *>(raw_audio_storage[i].data()), size))
+// 			{
+// 				buffer_loaded = buffer->setup(raw_audio_storage[i].data(),
+// 											  static_cast<unsigned int>(size),
+// 											  48000,
+// 											  false,
+// 											  16);
+// 			}
+// 		}
+
+// 		violinToneSources[i] = new cAudioSource();
+// 		if (buffer_loaded)
+// 		{
+// 			violinToneSources[i]->setAudioBuffer(buffer);
+// 			violinToneSources[i]->setLoop(true); // Loop forever
+// 			violinToneSources[i]->setPitch(1.0);
+// 			violinToneSources[i]->setGain(0.0); // Start silent
+// 			violinToneSources[i]->play();		// 🛑 Start playing immediately!
+// 			std::cout << "✅ SUCCESS: Audio playing silently for " << kStringConfigs[i].link_name << std::endl;
+// 		}
+// 		else
+// 		{
+// 			std::cout << "❌ ERROR: Could not load RAW PCM file: " << file_paths[i] << std::endl;
+// 			delete violinToneSources[i];
+// 			violinToneSources[i] = nullptr;
+// 			delete buffer;
+// 		}
+// 	}
+// }
+
+// void updateAudioPhysics(std::shared_ptr<SaiSimulation::SaiSimulation> sim)
+// {
+// 	std::array<AudioState, 4> next_audio_states;
+
+// 	// 🛑 The Physics Debouncer: This memory array survives between loops
+// 	static std::array<int, 4> contact_memory = {0, 0, 0, 0};
+// 	static std::array<double, 4> tangential_force_lowpass = {0.0, 0.0, 0.0, 0.0};
+// 	static std::array<double, 4> previous_force_signal = {0.0, 0.0, 0.0, 0.0};
+// 	static std::array<unsigned long long, 4> last_zero_crossing_step = {0, 0, 0, 0};
+// 	static std::array<double, 4> estimated_frequency_hz = {
+// 		kStringConfigs[0].open_string_frequency_hz,
+// 		kStringConfigs[1].open_string_frequency_hz,
+// 		kStringConfigs[2].open_string_frequency_hz,
+// 		kStringConfigs[3].open_string_frequency_hz};
+// 	static unsigned long long step_counter = 0;
+// 	static constexpr double sim_freq = 2000.0;
+
+// 	for (int i = 0; i < static_cast<int>(kStringConfigs.size()); ++i)
+// 	{
+// 		next_audio_states[i] = AudioState();
+// 		const auto contact_list = sim->getContactList(violin_name, kStringConfigs[i].link_name);
+
+// 		if (!contact_list.empty())
+// 		{
+// 			const Eigen::Vector3d &contact_force = contact_list[0].second;
+// 			const double tangential_force = contact_force.x();
+// 			tangential_force_lowpass[i] =
+// 				0.995 * tangential_force_lowpass[i] + 0.005 * tangential_force;
+// 			const double force_signal = tangential_force - tangential_force_lowpass[i];
+
+// 			if ((previous_force_signal[i] <= 0.0) && (force_signal > 0.0))
+// 			{
+// 				if (last_zero_crossing_step[i] > 0)
+// 				{
+// 					const double period_steps =
+// 						static_cast<double>(step_counter - last_zero_crossing_step[i]);
+// 					if (period_steps > 1.0)
+// 					{
+// 						const double measured_frequency = sim_freq / period_steps;
+// 						if (measured_frequency >= kMinAudibleFrequencyHz &&
+// 							measured_frequency <= kMaxAudibleFrequencyHz)
+// 						{
+// 							estimated_frequency_hz[i] =
+// 								0.95 * estimated_frequency_hz[i] + 0.05 * measured_frequency;
+// 						}
+// 					}
+// 				}
+// 				last_zero_crossing_step[i] = step_counter;
+// 			}
+// 			previous_force_signal[i] = force_signal;
+
+// 			// If it touches, fill the memory with 200 physics frames (0.1 seconds at 2000Hz)
+// 			contact_memory[i] = 200;
+// 		}
+// 		else if (contact_memory[i] > 0)
+// 		{
+// 			// If the bow micro-bounces off, slowly drain the memory instead of instantly stopping
+// 			contact_memory[i]--;
+// 			previous_force_signal[i] = 0.0;
+// 		}
+
+// 		// As long as there is memory remaining, we treat it as a perfectly steady contact
+// 		next_audio_states[i].frequency_hz = estimated_frequency_hz[i];
+// 		if (contact_memory[i] > 0)
+// 		{
+// 			next_audio_states[i].in_contact = true;
+// 			next_audio_states[i].gain = kConstantTestVolume;
+// 		}
+// 		else
+// 		{
+// 			next_audio_states[i].in_contact = false;
+// 			next_audio_states[i].gain = 0.0;
+// 		}
+// 	}
+
+// 	{
+// 		lock_guard<mutex> lock(mutex_audio);
+// 		audio_states = next_audio_states;
+// 	}
+
+// 	step_counter++;
+// }
+
+// void updateAudioPlayback()
+// {
+// 	// 🛑 Track volume in C++ to prevent OpenAL read-delays from causing oscillations
+// 	static std::array<double, 4> smooth_gain_tracker = {0.0, 0.0, 0.0, 0.0};
+// 	static std::array<bool, 4> was_active_last_update = {false, false, false, false};
+
+// 	lock_guard<mutex> lock(mutex_audio);
+// 	for (int i = 0; i < static_cast<int>(kStringConfigs.size()); ++i)
+// 	{
+// 		if (!violinToneSources[i])
+// 			continue;
+
+// 		const double measured_frequency = std::clamp(
+// 			audio_states[i].frequency_hz, kMinAudibleFrequencyHz,
+// 			kMaxAudibleFrequencyHz);
+// 		const double target_frequency = kStringConfigs[i].open_string_frequency_hz;
+// 		const double frequency_error =
+// 			std::abs(measured_frequency - target_frequency);
+// 		const double frequency_match_strength = std::clamp(
+// 			1.0 - (frequency_error / kFrequencyMatchToleranceHz), 0.0, 1.0);
+// 		double target_gain = audio_states[i].in_contact
+// 								 ? kConstantTestVolume *
+// 									   (0.15 + 0.85 * frequency_match_strength)
+// 								 : 0.0;
+// 		const bool string_active = target_gain > 0.005;
+
+// 		// Smoothly glide the volume up and down (acting like a shock absorber)
+// 		smooth_gain_tracker[i] = (0.9 * smooth_gain_tracker[i]) + (0.1 * target_gain);
+
+// 		// Only send the command to OpenAL if the volume changed meaningfully
+// 		if (std::abs(violinToneSources[i]->getGain() - smooth_gain_tracker[i]) > 0.001)
+// 		{
+// 			violinToneSources[i]->setGain(smooth_gain_tracker[i]);
+// 		}
+
+// 		if (string_active && !was_active_last_update[i])
+// 		{
+// 			std::cout << "[audio] activated " << kStringConfigs[i].link_name
+// 					  << " | estimated freq: " << measured_frequency
+// 					  << " Hz | target: " << target_frequency << " Hz"
+// 					  << std::endl;
+// 		}
+// 		else if (!string_active && was_active_last_update[i])
+// 		{
+// 			std::cout << "[audio] deactivated " << kStringConfigs[i].link_name
+// 					  << std::endl;
+// 		}
+
+// 		was_active_last_update[i] = string_active;
+// 	}
+// }
+
+// void cleanupAudio()
+// {
+// 	for (int i = 0; i < static_cast<int>(kStringConfigs.size()); ++i)
+// 	{
+// 		if (violinToneSources[i])
+// 		{
+// 			cAudioBuffer *buffer = violinToneSources[i]->getAudioBuffer();
+// 			delete violinToneSources[i];
+// 			if (buffer)
+// 				delete buffer;
+// 		}
+// 	}
+// 	if (audioDevice)
+// 		delete audioDevice;
+// }
