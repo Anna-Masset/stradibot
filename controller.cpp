@@ -41,15 +41,15 @@ void calibration(Vector3d &ee_pos_desired,
 				 Matrix3d &ee_ori_desired,
 				 Vector3d &ee_moment_desired,
 				 int &key_pressed,
-				 const shared_ptr<MotionForceTask> &bowing_task,
+				 const shared_ptr<MotionForceTask> &general_task,
 				 SaiCommon::RedisClient &redis_client,
 				 vector<Vector3d> &string_positions,
 				 vector<Matrix3d> &string_orientations,
 				 const Matrix3d &initial_orientation,
 				 const Vector3d &initial_position)
 {
-	bowing_task->parametrizeForceMotionSpaces(3);
-	bowing_task->parametrizeMomentRotMotionSpaces(3);
+	general_task->parametrizeForceMotionSpaces(3);
+	general_task->parametrizeMomentRotMotionSpaces(3);
 
 	ee_pos_desired = initial_position;
 	ee_ori_desired = initial_orientation;
@@ -67,8 +67,8 @@ void calibration(Vector3d &ee_pos_desired,
 	{
 
 		key_pressed = redis_client.getDouble(KEYBOARD_INPUT_KEY);
-		string_positions[key_pressed - 1] = bowing_task->getCurrentPosition();
-		string_orientations[key_pressed - 1] = bowing_task->getCurrentOrientation();
+		string_positions[key_pressed - 1] = general_task->getCurrentPosition();
+		string_orientations[key_pressed - 1] = general_task->getCurrentOrientation();
 		cout << "string " << key_pressed << " position: " << string_positions[key_pressed - 1].transpose() << "\n";
 		cout << "string " << key_pressed << " orientation: \n"
 			 << string_orientations[key_pressed - 1] << "\n";
@@ -97,14 +97,14 @@ bool moveToString(Vector3d &ee_pos_desired,
 void bowingMotion(Vector3d &ee_pos_desired,
 				  Matrix3d &ee_ori_desired,
 				  Vector3d &ee_force_desired,
-				  const shared_ptr<MotionForceTask> &bowing_task,
+				  const shared_ptr<MotionForceTask> &general_task,
 				  const Vector3d &string_position,
 				  const Matrix3d &string_orientation_world,
 				  const Vector3d &bowing_dir,
 				  double time)
 {
-	bowing_task->parametrizeForceMotionSpaces(1, Vector3d::UnitY()); // switch to force control
-	bowing_task->parametrizeMomentRotMotionSpaces(0);				 // no moment control
+	general_task->parametrizeForceMotionSpaces(1, Vector3d::UnitY()); // switch to force control
+	general_task->parametrizeMomentRotMotionSpaces(0);				 // no moment control
 
 	ee_pos_desired = string_position + 0.60 / 2 * sin(2 * M_PI * 0.1 * time) * bowing_dir;
 	ee_force_desired << 0.0, -1.0, 0.0;
@@ -151,17 +151,17 @@ int main()
 	Affine3d compliant_frame = Affine3d::Identity();
 	compliant_frame.translation() = control_point;
 
-	auto bowing_task = std::make_shared<MotionForceTask>(
-		robot, control_link, compliant_frame, "bowing_task", true);
+	auto general_task = std::make_shared<MotionForceTask>(
+		robot, control_link, compliant_frame, "general_task", true);
 
-	bowing_task->disableInternalOtg(); // not necessary when there is contact
+	general_task->disableInternalOtg(); // not necessary when there is contact
 
-	bowing_task->parametrizeForceMotionSpaces(1, Vector3d::UnitY());
-	bowing_task->parametrizeMomentRotMotionSpaces(0);
+	general_task->parametrizeForceMotionSpaces(1, Vector3d::UnitY());
+	general_task->parametrizeMomentRotMotionSpaces(0);
 
-	bowing_task->setPosControlGains(400, 40, 0);
-	bowing_task->setOriControlGains(400, 40, 0);
-	bowing_task->setForceControlGains(0.7, 10.0, 1.3);
+	general_task->setPosControlGains(400, 40, 0);
+	general_task->setOriControlGains(400, 40, 0);
+	general_task->setForceControlGains(0.7, 10.0, 1.3);
 
 	// Joint task
 	auto joint_task = std::make_shared<JointTask>(robot);
@@ -173,8 +173,8 @@ int main()
 	// ============================
 	// INITIALIZATION & DATABASE
 	// ============================
-	const Vector3d initial_position = bowing_task->getCurrentPosition();
-	const Matrix3d initial_orientation = bowing_task->getCurrentOrientation();
+	const Vector3d initial_position = general_task->getCurrentPosition();
+	const Matrix3d initial_orientation = general_task->getCurrentOrientation();
 	int key_pressed = 0;
 
 	vector<Vector3d> string_positions(4);
@@ -201,7 +201,7 @@ int main()
 	Matrix3d ee_ori_desired = string_orientation_world;
 	Vector3d ee_moment_desired;
 
-	Vector3d control_position = bowing_task->getCurrentPosition();
+	Vector3d control_position = general_task->getCurrentPosition();
 
 	// ============================
 	// STATE MACHINE INIT
@@ -244,7 +244,7 @@ int main()
 						ee_ori_desired,
 						ee_moment_desired,
 						key_pressed,
-						bowing_task,
+						general_task,
 						redis_client,
 						string_positions,
 						string_orientations,
@@ -310,7 +310,7 @@ int main()
 			bowingMotion(ee_pos_desired,
 						 ee_ori_desired,
 						 ee_force_desired,
-						 bowing_task,
+						 general_task,
 						 string_position,
 						 string_orientation_world,
 						 bowing_dir,
@@ -323,19 +323,19 @@ int main()
 		// APPLY TASKS
 		// ============================
 
-		bowing_task->setGoalPosition(ee_pos_desired);
-		bowing_task->setGoalOrientation(ee_ori_desired);
-		bowing_task->setGoalForce(ee_force_desired);
-		bowing_task->setGoalMoment(ee_moment_desired);
+		general_task->setGoalPosition(ee_pos_desired);
+		general_task->setGoalOrientation(ee_ori_desired);
+		general_task->setGoalForce(ee_force_desired);
+		general_task->setGoalMoment(ee_moment_desired);
 
-		control_position = bowing_task->getCurrentPosition();
+		control_position = general_task->getCurrentPosition();
 
 		N_prec.setIdentity();
-		bowing_task->updateTaskModel(N_prec);
-		joint_task->updateTaskModel(bowing_task->getTaskAndPreviousNullspace());
+		general_task->updateTaskModel(N_prec);
+		joint_task->updateTaskModel(general_task->getTaskAndPreviousNullspace());
 
 		command_torques =
-			bowing_task->computeTorques() +
+			general_task->computeTorques() +
 			joint_task->computeTorques();
 
 		// Redis write

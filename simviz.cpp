@@ -119,6 +119,7 @@ int main()
 	// start redis client
 	auto redis_client = SaiCommon::RedisClient();
 	redis_client.connect();
+	redis_client.setEigen(CONTROL_POSITION_KEY, Vector3d::Zero()); // This initialization avoids the pb if the controller has not been started before
 
 	// set up signal handler
 	signal(SIGABRT, &sighandler);
