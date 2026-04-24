@@ -104,7 +104,7 @@ void bowingMotion(Vector3d &ee_pos_desired,
 				  double time)
 {
 	general_task->parametrizeForceMotionSpaces(1, Vector3d::UnitY()); // switch to force control
-	general_task->parametrizeMomentRotMotionSpaces(0);				 // no moment control
+	general_task->parametrizeMomentRotMotionSpaces(0);				  // no moment control
 
 	ee_pos_desired = string_position + 0.60 / 2 * sin(2 * M_PI * 0.1 * time) * bowing_dir;
 	ee_force_desired << 0.0, -1.0, 0.0;

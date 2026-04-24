@@ -87,7 +87,7 @@ mutex mutex_torques, mutex_update;
 static const string robot_name = "flexiv";
 static const string violin_name = "violin";
 static const string camera_name = "camera_fixed";
-static const string sensor_link_name = "link7";
+static const string sensor_link_name = "bow";
 static const string contact_link_name = "bow";
 
 // dynamic objects information
@@ -119,7 +119,9 @@ int main()
 	// start redis client
 	auto redis_client = SaiCommon::RedisClient();
 	redis_client.connect();
-	redis_client.setEigen(CONTROL_POSITION_KEY, Vector3d::Zero()); // This initialization avoids the pb if the controller has not been started before
+	redis_client.setEigen(CONTROL_POSITION_KEY, Vector3d::Zero());		 // This initialization avoids the pb if the controller has not been started before
+	redis_client.setEigen(BOW_FORCE_SENSOR_WORLD_KEY, Vector3d::Zero()); // This initialization avoids the pb if the controller has not been started before
+	redis_client.setEigen(BOW_FORCE_SENSOR_LOCAL_KEY, Vector3d::Zero()); // This initialization avoids the pb if the controller has not been started before
 
 	// set up signal handler
 	signal(SIGABRT, &sighandler);
@@ -156,6 +158,7 @@ int main()
 
 	// --- FORCE SENSOR AT EE ---
 	Eigen::Affine3d T_link_sensor = Eigen::Affine3d::Identity();
+	T_link_sensor.translation() = Eigen::Vector3d(0.0, 0.05, 0.35); // sensor frame at the EE
 	double sensor_filter_cutoff_freq = 0.5;
 	sim->addSimulatedForceSensor(robot_name, sensor_link_name, T_link_sensor,
 								 sensor_filter_cutoff_freq);
@@ -188,7 +191,6 @@ int main()
 	redis_client.setEigen(JOINT_ANGLES_KEY, robot->q());
 	redis_client.setEigen(JOINT_VELOCITIES_KEY, robot->dq());
 	redis_client.setEigen(JOINT_TORQUES_COMMANDED_KEY, 0 * robot->q());
-	redis_client.setEigen(CONTACT_POINT_FORCE_KEY, contact_force);
 	redis_client.setEigen(CONTACT_POINT_POSITION_KEY, contact_pos);
 	redis_client.setDouble(KEYBOARD_INPUT_KEY, key_pressed);
 
@@ -197,7 +199,7 @@ int main()
 	//--------------------------------------------------------------------------
 	// initializeAudio(graphics);
 
-	// chai3d::cShapeSphere *control_sphere = graphics->createGoalSphere(control_position, 0.01, chai3d::cColorf(1.0, 0.65, 0.0), true);
+	chai3d::cShapeSphere *control_sphere = graphics->createGoalSphere(control_position, 0.01, chai3d::cColorf(1.0, 0.65, 0.0), true);
 
 	// start simulation thread
 	thread sim_thread(simulation, sim);
@@ -208,7 +210,7 @@ int main()
 		control_position = redis_client.getEigen(CONTROL_POSITION_KEY);
 		control_pose = Affine3d::Identity();
 		control_pose.translation() = control_position;
-		// graphics->updateGoalSphere(control_sphere, control_position, true, false, Matrix3d::Identity());
+		graphics->updateGoalSphere(control_sphere, control_position, true, false, Matrix3d::Identity());
 		graphics->updateRobotGraphics(robot_name, redis_client.getEigen(JOINT_ANGLES_KEY));
 
 		if (graphics->isKeyPressed(49)) // 1 key
@@ -245,6 +247,15 @@ int main()
 		for (const auto sensor_data : sim->getAllForceSensorData())
 		{
 			graphics->updateDisplayedForceSensor(sensor_data);
+			redis_client.setEigen(BOW_FORCE_SENSOR_WORLD_KEY, sensor_data.force_world_frame);
+			redis_client.setEigen(BOW_FORCE_SENSOR_LOCAL_KEY, sensor_data.force_local_frame);
+			cout << "force local frame:\t" << sensor_data.force_local_frame.transpose() << endl;
+		}
+		const auto bow_contact_list = sim->getContactList(robot_name, sensor_link_name);
+		if (!bow_contact_list.empty())
+		{
+			const auto &bow_contact_force = bow_contact_list[0].second;
+			redis_client.setEigen(CONTACT_POINT_FORCE_KEY, bow_contact_force);
 		}
 		{
 			lock_guard<mutex> lock(mutex_update);
@@ -266,22 +277,22 @@ int main()
 		// updateAudioPlayback();
 
 		// gets the sensor measurements
-		// 	if (simulation_counter % 100 == 0)
-		// 	{
-		// 		cout << "force local frame:\t"
-		// 			 << sim->getSensedForce(robot_name, sensor_link_name).transpose()
-		// 			 << endl;
-		// 		cout << "force world frame:\t"
-		// 			 << sim->getSensedForce(robot_name, sensor_link_name, false).transpose()
-		// 			 << endl;
-		// 		cout << "moment local frame:\t"
-		// 			 << sim->getSensedMoment(robot_name, sensor_link_name).transpose()
-		// 			 << endl;
-		// 		cout << "moment world frame:\t"
-		// 			 << sim->getSensedMoment(robot_name, sensor_link_name, false).transpose()
-		// 			 << endl;
-		// 		cout << endl;
-		// 	}
+		if (simulation_counter % 100 == 0)
+		{
+			cout << "force local frame:\t"
+				 << sim->getSensedForce(robot_name, sensor_link_name).transpose()
+				 << endl;
+			// 		cout << "force world frame:\t"
+			// 			 << sim->getSensedForce(robot_name, sensor_link_name, false).transpose()
+			// 			 << endl;
+			// 		cout << "moment local frame:\t"
+			// 			 << sim->getSensedMoment(robot_name, sensor_link_name).transpose()
+			// 			 << endl;
+			// 		cout << "moment world frame:\t"
+			// 			 << sim->getSensedMoment(robot_name, sensor_link_name, false).transpose()
+			// 			 << endl;
+			// 		cout << endl;
+		}
 
 		simulation_counter++;
 	}

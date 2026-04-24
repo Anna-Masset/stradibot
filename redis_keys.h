@@ -12,6 +12,9 @@ const std::string CONTROLLER_RUNNING_KEY = "sai::sim::flexiv::controller";
 const std::string CONTACT_POINT_POSITION_KEY = "sai::sim::bow::contact::position";
 const std::string CONTACT_POINT_FORCE_KEY = "sai::sim::bow::contact::force";
 
+const std::string BOW_FORCE_SENSOR_WORLD_KEY = "sai::sim::bow::sensor::force::world";
+const std::string BOW_FORCE_SENSOR_LOCAL_KEY = "sai::sim::bow::sensor::force::local";
+
 const std::string CONTROL_POSITION_KEY = "sai::sim::bow::control::position";
 
 const std::string KEYBOARD_INPUT_KEY = "sai::sim::string::keyboard_input";
