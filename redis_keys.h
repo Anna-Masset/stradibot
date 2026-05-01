@@ -14,7 +14,15 @@ const std::string CONTACT_POINT_FORCE_KEY = "sai::sim::bow::contact::force";
 
 const std::string BOW_FORCE_SENSOR_WORLD_KEY = "sai::sim::bow::sensor::force::world";
 const std::string BOW_FORCE_SENSOR_LOCAL_KEY = "sai::sim::bow::sensor::force::local";
+const std::string BOW_MOMENT_SENSOR_LOCAL_KEY = "sai::sim::bow::sensor::moment::local";
 
 const std::string CONTROL_POSITION_KEY = "sai::sim::bow::control::position";
 
 const std::string KEYBOARD_INPUT_KEY = "sai::sim::string::keyboard_input";
+
+const std::string TARGET_STRING_KEY = "sai::sim::flexiv::target_string";
+
+const std::string BOW_FROG_POSITION_KEY = "sai::sim::flexiv::bow::frog_position";
+const std::string BOW_DIRECTION_KEY = "sai::sim::flexiv::bow::direction";
+const std::string SENSOR_ROTATION_KEY = "sai::sim::flexiv::sensor::rotation";
+const std::string SENSOR_POSITION_KEY = "sai::sim::flexiv::sensor::position";

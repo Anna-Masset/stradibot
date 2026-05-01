@@ -159,7 +159,7 @@ int main()
 	// --- FORCE SENSOR AT EE ---
 	Eigen::Affine3d T_link_sensor = Eigen::Affine3d::Identity();
 	T_link_sensor.translation() = Eigen::Vector3d(0.0, 0.05, 0.35); // sensor frame at the EE
-	double sensor_filter_cutoff_freq = 0.5;
+	double sensor_filter_cutoff_freq = 30.0;  // increased from 0.5 to reduce phase lag
 	sim->addSimulatedForceSensor(robot_name, sensor_link_name, T_link_sensor,
 								 sensor_filter_cutoff_freq);
 
@@ -249,13 +249,14 @@ int main()
 			graphics->updateDisplayedForceSensor(sensor_data);
 			redis_client.setEigen(BOW_FORCE_SENSOR_WORLD_KEY, sensor_data.force_world_frame);
 			redis_client.setEigen(BOW_FORCE_SENSOR_LOCAL_KEY, sensor_data.force_local_frame);
+			redis_client.setEigen(BOW_MOMENT_SENSOR_LOCAL_KEY, sensor_data.moment_local_frame);
 			cout << "force local frame:\t" << sensor_data.force_local_frame.transpose() << endl;
 		}
 		const auto bow_contact_list = sim->getContactList(robot_name, sensor_link_name);
 		if (!bow_contact_list.empty())
 		{
-			const auto &bow_contact_force = bow_contact_list[0].second;
-			redis_client.setEigen(CONTACT_POINT_FORCE_KEY, bow_contact_force);
+			redis_client.setEigen(CONTACT_POINT_FORCE_KEY, bow_contact_list[0].second);
+			redis_client.setEigen(CONTACT_POINT_POSITION_KEY, bow_contact_list[0].first);
 		}
 		{
 			lock_guard<mutex> lock(mutex_update);
