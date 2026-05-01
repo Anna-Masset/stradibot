@@ -447,8 +447,15 @@ int main()
 
 		redis_client.setEigen(JOINT_TORQUES_COMMANDED_KEY, command_torques);
 		redis_client.setEigen(CONTROL_POSITION_KEY, control_position);
-	}
 
+		// publish bow pose for KF
+		redis_client.setEigen(BOW_FROG_POSITION_KEY,
+			robot->position("bow") + robot->rotation("bow") * Vector3d(0.0, 0.0, 0.376));
+		redis_client.setEigen(BOW_DIRECTION_KEY, -robot->rotation("bow").col(2));
+		redis_client.setEigen(SENSOR_ROTATION_KEY, robot->rotation("bow"));
+		redis_client.setEigen(SENSOR_POSITION_KEY, robot->position("bow"));
+		redis_client.setDouble(TARGET_STRING_KEY, key_pressed - 1);
+	}
 	timer.stop();
 	cout << "\nSimulation loop timer stats:\n";
 	timer.printInfoPostRun();
