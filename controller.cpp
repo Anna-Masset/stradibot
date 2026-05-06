@@ -666,13 +666,22 @@ int main(int argc, char *argv[])
                 target_string = note.string_idx;
                 Vector3d new_bowing_dir = string_orientations[target_string].col(2);
 
-                // Go to calibration point: string change target is always reachable.
-                // Preserving bow_displacement across strings would send the robot to
-                // uncalibrated positions unreachable in position control mode.
-                bow_displacement = 0.0;
-                midi_bow_dir = 1; // restart down-bow from center
+                // Symmetric clamp: guarantee MIN_STROKE in both directions.
+                // Requires calibration at the center of the bow stroke.
+                bow_displacement = max(-(BOW_AMPLITUDE - MIN_STROKE),
+                                   min(  BOW_AMPLITUDE - MIN_STROKE, bow_displacement));
 
-                move_to_string_target = string_positions[target_string];
+                // Flip direction if not enough stroke remaining in current direction
+                double avail = (midi_bow_dir > 0)
+                    ? (BOW_AMPLITUDE - bow_displacement)
+                    : (bow_displacement + BOW_AMPLITUDE);
+                if (avail < MIN_STROKE) {
+                    midi_bow_dir *= -1;
+                    cout << "  [bow dir flipped: not enough stroke]\n";
+                }
+
+                move_to_string_target = string_positions[target_string]
+                                        + bow_displacement * new_bowing_dir;
 
                 transition_start_pos = general_task->getCurrentPosition();
                 move_phase = (abs(target_string - current_string) == 1)
