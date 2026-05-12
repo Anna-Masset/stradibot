@@ -3,8 +3,10 @@
  * @brief Stradibot controller — MIDI FSM + manual bowing mode
  *
  * Usage:
- *   ./controller_stradibot              → manual bowing (CALIBRATION → MANUAL_BOWING)
- *   ./controller_stradibot file.mid     → MIDI playback (CALIBRATION → LOAD_MIDI → IDLE → ...)
+ *   ./controller_stradibot                          → manual bowing
+ *   ./controller_stradibot file.mid                → MIDI playback
+ *   ./controller_stradibot file.mid /dev/ttyACM0   → MIDI + Arduino (Linux)
+ *   ./controller_stradibot file.mid /dev/cu.usbmodemXXXX → MIDI + Arduino (Mac)
  */
 
 #include <SaiModel.h>
@@ -20,6 +22,10 @@
 #include <algorithm>
 #include <cmath>
 #include <climits>
+#include <cstring>
+#include <fcntl.h>
+#include <termios.h>
+#include <unistd.h>
 
 using namespace std;
 using namespace Eigen;
@@ -27,7 +33,58 @@ using namespace SaiPrimitives;
 
 #include <signal.h>
 bool runloop = false;
-void sighandler(int) { runloop = false; }
+static int serial_fd = -1;
+
+void sighandler(int) {
+    runloop = false;
+    if (serial_fd >= 0) { uint8_t z = 0; [[maybe_unused]] auto r = write(serial_fd, &z, 1); }
+}
+
+// Mapping fret -> solenoid number (1-8), 0 = open string (no solenoid)
+// Each solenoid is a curved bar that presses all 4 strings at once.
+// The bow selects the string; the solenoid selects the fret.
+static const int FRET_SOLENOID[9] = {
+    0,  // fret 0: open string
+    1,  // fret 1
+    2,  // fret 2
+    3,  // fret 3
+    4,  // fret 4
+    5,  // fret 5
+    6,  // fret 6
+    7,  // fret 7
+    8,  // fret 8
+};
+
+static int last_sent_solenoid = -1;
+
+static void serialSend(int solenoid) {
+    if (serial_fd < 0 || solenoid == last_sent_solenoid) return;
+    uint8_t byte = (uint8_t)solenoid;
+    [[maybe_unused]] auto r = write(serial_fd, &byte, 1);
+    last_sent_solenoid = solenoid;
+}
+
+static int openSerialPort(const string& port) {
+    int fd = open(port.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
+    if (fd < 0) {
+        cerr << "Warning: cannot open serial port " << port << " — Arduino disabled\n";
+        return -1;
+    }
+    struct termios tty;
+    memset(&tty, 0, sizeof(tty));
+    tcgetattr(fd, &tty);
+    cfsetispeed(&tty, B115200);
+    cfsetospeed(&tty, B115200);
+    tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
+    tty.c_cflag |= (CLOCAL | CREAD);
+    tty.c_cflag &= ~(PARENB | CSTOPB | CRTSCTS);
+    tty.c_lflag = 0;
+    tty.c_iflag = 0;
+    tty.c_oflag = 0;
+    tcsetattr(fd, TCSANOW, &tty);
+    cout << "Serial port " << port << " opened (115200 baud).\n";
+    return fd;
+}
 
 #include "redis_keys.h"
 
@@ -396,12 +453,17 @@ int main(int argc, char *argv[])
     static const string robot_file =
         string(STRADIBOT_FOLDER) + "/urdf_models/flexiv_violin/flexiv.urdf";
 
-    // argv[1] = optional MIDI file path
-    const string midi_file = (argc > 1) ? string(argv[1]) : "";
-    const bool   midi_mode = !midi_file.empty();
+    // argv[1] = optional MIDI file path, argv[2] = optional serial port
+    const string midi_file   = (argc > 1) ? string(argv[1]) : "";
+    const bool   midi_mode   = !midi_file.empty();
+    const string serial_port = (argc > 2) ? string(argv[2]) : "";
 
     auto redis_client = SaiCommon::RedisClient();
     redis_client.connect();
+
+    if (!serial_port.empty())
+        serial_fd = openSerialPort(serial_port);
+    serialSend(0); // release all solenoids at startup
 
     signal(SIGABRT, &sighandler);
     signal(SIGTERM, &sighandler);
@@ -656,9 +718,10 @@ int main(int argc, char *argv[])
         {
             const NoteEvent &note = notes[note_idx];
 
-            // Publish finger target for Arduino
+            // Publish finger target (Redis for monitoring, serial for Arduino)
             redis_client.set(FINGER_TARGET_KEY,
                              to_string(note.string_idx) + ":" + to_string(note.fret));
+            serialSend(FRET_SOLENOID[note.fret]);
 
             bow_note_initialized = false; // BOW_NOTE will re-init on entry
 
@@ -691,7 +754,6 @@ int main(int argc, char *argv[])
                 cout << "MIDI: string change " << current_string+1
                      << " -> " << target_string+1
                      << "  bow_disp=" << bow_displacement << "m\n";
-                general_task->enableInternalOtgAccelerationLimited(0.3, 1.0, M_PI/3, M_PI);
                 post_move_state = ControllerState::BOW_NOTE;
                 state           = ControllerState::MOVE_TO_STRING;
             } else {
@@ -783,6 +845,7 @@ int main(int argc, char *argv[])
         // ---- NEXT_NOTE ----
         case ControllerState::NEXT_NOTE:
         {
+            serialSend(0); // release solenoid between notes
             note_idx++;
             if (note_idx >= (int)notes.size()) {
                 cout << "MIDI playback complete.\n";
@@ -831,6 +894,7 @@ int main(int argc, char *argv[])
         // ---- END ----
         case ControllerState::END:
         {
+            serialSend(0);
             general_task->parametrizeForceMotionSpaces(0);
             general_task->parametrizeMomentRotMotionSpaces(0);
             ee_force_desired.setZero();
@@ -865,5 +929,7 @@ int main(int argc, char *argv[])
     cout << "\nSimulation loop timer stats:\n";
     timer.printInfoPostRun();
     redis_client.setEigen(JOINT_TORQUES_COMMANDED_KEY, VectorXd::Zero(dof));
+    serialSend(0);
+    if (serial_fd >= 0) close(serial_fd);
     return 0;
 }
