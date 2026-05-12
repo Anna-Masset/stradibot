@@ -1,5 +1,7 @@
 set(STRADIBOT_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}")
 add_definitions(-DSTRADIBOT_FOLDER="${STRADIBOT_FOLDER}")
+set(MIDI_FOLDER "${STRADIBOT_FOLDER}/midi_files/")
+add_definitions(-DMIDI_FOLDER="${MIDI_FOLDER}")
 
 # create an executable
 set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CS225A_BINARY_DIR}/stradibot)

@@ -20,4 +20,7 @@ const std::string CONTROL_POSITION_KEY = "sai::sim::bow::control::position";
 const std::string KEYBOARD_INPUT_KEY = "sai::sim::string::keyboard_input";
 
 const std::string FINGER_TARGET_KEY = "sai::sim::bow::finger::target";
-const std::string FINGER_STATE_KEY  = "sai::sim::bow::finger::state";
+const std::string FINGER_STATE_KEY = "sai::sim::bow::finger::state";
+
+const std::string BOW_FORCE_CONTROLLED_KEY = "sai::control::bow::force_controlled";
+const std::string BOW_SPEED_CONTROLLED_KEY = "sai::control::bow::speed_controlled";
