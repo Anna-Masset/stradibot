@@ -490,6 +490,9 @@ bool moveToString(Vector3d &ee_pos_desired,
 				  MoveToStringPhase &phase,
 				  double lift_height,
 				  double position_threshold,
+				  double force_threshold,
+				  double &sensed_force,
+				  SaiCommon::RedisClient &redis_client,
 				  double control_freq,
 				  double transition_speed)
 {
@@ -499,6 +502,7 @@ bool moveToString(Vector3d &ee_pos_desired,
 
 	const double step = transition_speed / control_freq;
 	Vector3d current_pos = general_task->getCurrentPosition();
+	sensed_force = redis_client.getEigen(BOW_FORCE_SENSOR_LOCAL_KEY)(1);
 
 	auto move_toward = [&](const Vector3d &waypoint)
 	{
@@ -515,7 +519,7 @@ bool moveToString(Vector3d &ee_pos_desired,
 	{
 		ee_ori_desired = target_string_orientation;
 		move_toward(target_string_position);
-		return (current_pos - target_string_position).norm() < position_threshold;
+		return (current_pos - target_string_position).norm() < position_threshold || abs(sensed_force) > force_threshold;
 	}
 
 	// Non-adjacent: lift / move laterally / lower
@@ -543,7 +547,8 @@ bool moveToString(Vector3d &ee_pos_desired,
 		break;
 	case MoveToStringPhase::LOWERING:
 		move_toward(target_string_position);
-		if ((current_pos - target_string_position).norm() < position_threshold)
+		if ((current_pos - target_string_position).norm() < position_threshold ||
+			abs(sensed_force) > force_threshold)
 			return true;
 		break;
 	default:
@@ -563,8 +568,8 @@ int main(int argc, char *argv[])
 
 	// argv[1] = optional MIDI file path, argv[2] = optional serial port
 	string midi_file = (argc > 1) ? string(argv[1]) : "";
-	midi_file = string(MIDI_FOLDER) + midi_file; // prepend MIDI_FOLDER path
 	const bool midi_mode = !midi_file.empty();
+	midi_file = string(MIDI_FOLDER) + midi_file; // prepend MIDI_FOLDER path
 	const string serial_port = (argc > 2) ? string(argv[2]) : "";
 
 	auto redis_client = SaiCommon::RedisClient();
@@ -629,8 +634,10 @@ int main(int argc, char *argv[])
 	const double near_end_ratio = 0.75;
 
 	// Shared
-	const double position_threshold = 0.01; // m
-	const double transition_speed = 0.15;	// m/s
+	const double position_threshold = 0.01;										// m
+	const double force_threshold = 0.01;										// N
+	double sensed_force = redis_client.getEigen(BOW_FORCE_SENSOR_LOCAL_KEY)(1); // Force along y in bow frame (normal dir)
+	const double transition_speed = 0.15;										// m/s
 
 	// ---- State variables ----
 	const Vector3d initial_position = general_task->getCurrentPosition();
@@ -906,7 +913,7 @@ int main(int argc, char *argv[])
 				move_to_string_target,
 				string_orientations[target_string],
 				transition_start_pos,
-				move_phase, lh, position_threshold, control_freq, transition_speed);
+				move_phase, lh, position_threshold, force_threshold, sensed_force, redis_client, control_freq, transition_speed);
 
 			// Safety timeout: if the target is unreachable, don't block forever
 			if (!done && time_in_state > 8.0)
