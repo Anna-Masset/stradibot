@@ -26,3 +26,8 @@ const std::string BOW_FROG_POSITION_KEY = "sai::sim::flexiv::bow::frog_position"
 const std::string BOW_DIRECTION_KEY = "sai::sim::flexiv::bow::direction";
 const std::string SENSOR_ROTATION_KEY = "sai::sim::flexiv::sensor::rotation";
 const std::string SENSOR_POSITION_KEY = "sai::sim::flexiv::sensor::position";
+const std::string FINGER_TARGET_KEY = "sai::sim::bow::finger::target";
+const std::string FINGER_STATE_KEY = "sai::sim::bow::finger::state";
+
+const std::string BOW_FORCE_CONTROLLED_KEY = "sai::control::bow::force_controlled";
+const std::string BOW_SPEED_CONTROLLED_KEY = "sai::control::bow::speed_controlled";
