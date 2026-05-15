@@ -2,7 +2,7 @@
 <!-- ======================================================================== -->
 <!-- | Flexiv Rizon 4 (with blurred dynamic parameters)                     | -->
 <!-- ======================================================================== -->
-<robot name="4S-Titania">
+<robot name="flexiv">
 
   <link name="base_link">
     <inertial>
