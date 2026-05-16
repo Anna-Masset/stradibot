@@ -3,7 +3,7 @@
 <world name="world_stradibot" gravity="0.0 0.0 -1.0">
 
 	<robot name="flexiv">
-		<model dir="/Users/joanamizrahi/OpenSai/cs225a/project_starter/stradibot/urdf_models/flexiv_violin" path="flexiv.urdf"
+		<model dir="cs225a/project_starter/stradibot/urdf_models/flexiv_violin" path="flexiv.urdf"
 			name="flexiv" />
 		<origin xyz="0.0 0.0 0.0" rpy="0 0 0" />
 	</robot>
@@ -28,7 +28,7 @@
 	</static_object>
 
 	<robot name="violin">
-		<model dir="/Users/joanamizrahi/OpenSai/cs225a/project_starter/stradibot/urdf_models/flexiv_violin" path="violin.urdf"
+		<model dir="cs225a/project_starter/stradibot/urdf_models/flexiv_violin" path="violin.urdf"
 			name="violin" />
 		<origin xyz="0.9 0.0 0.2" rpy="0 0 0" />
 	</robot>
