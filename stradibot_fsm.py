@@ -25,7 +25,6 @@ from dataclasses import dataclass
 # CONFIG
 # ============================================================
 
-CONFIG_FILE    = "stradibot.xml"
 CONTROLLER     = "cartesian_controller"
 LOOP_DT        = 0.01   # 100 Hz
 
@@ -37,40 +36,86 @@ CONTACT_FORCE_THRESHOLD = 0.1    # N   — force magnitude to detect contact
 BOW_SPEED               = 0.06   # m/s
 BOW_AMPLITUDE           = 0.15   # m   — half-stroke
 DESIRED_BOW_FORCE       = 1.0    # N   — normal force on string
+ANGULAR_SPEED           = np.pi/6    # rad/s — for orientation corrections during bowing
+
+IS_REAL = False
+CALIBRATION = True
+
+if IS_REAL:
+    CONFIG_FILE = "stradibot.xml"
+else:
+    CONFIG_FILE = "stradibot_simviz.xml"
+
 
 # ============================================================
 # REDIS KEYS
 # ============================================================
 
+if IS_REAL:
+    robot_name = "Titania"
+else:
+    robot_name = "flexiv"   
+
 @dataclass
 class RedisKeys:
-    goal_position:       str = "opensai::controllers::Titania::cartesian_controller::cartesian_task::goal_position"
-    goal_orientation:    str = "opensai::controllers::Titania::cartesian_controller::cartesian_task::goal_orientation"
-    current_position:    str = "opensai::controllers::Titania::cartesian_controller::cartesian_task::current_position"
-    current_orientation: str = "opensai::controllers::Titania::cartesian_controller::cartesian_task::current_orientation"
-    active_controller:   str = "opensai::controllers::Titania::active_controller_name"
-    config_file:         str = "::sai-interfaces-webui::config_file_name"
-    # joint control keys (for floating)
-    joint_task_kp:      str = "opensai::controllers::Titania::joint_controller::joint_task::kp"
-
+    goal_position:       str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::goal_position"
+    goal_orientation:    str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::goal_orientation"
+    current_position:    str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::current_position"
+    current_orientation: str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::current_orientation"
+    active_controller:   str = f"opensai::controllers::{robot_name}::active_controller_name"
+    config_file:         str = f"::sai-interfaces-webui::config_file_name"
     # force sensor (local frame, 3D vector)
-    # ft_force:            str = "opensai::sensors::Titania::ft_sensor::bow::force"
-    ft_force:            str = "opensai::sensors::Titania::ft_sensor::tcp_force"
+    joint_task_kp:       str = f"opensai::controllers::{robot_name}::joint_controller::joint_task::kp"
+    ft_force:            str = f"opensai::sensors::{robot_name}::ft_sensor::bow::force"
     # force/moment control keys
-    force_space_dim:         str = "opensai::controllers::Titania::cartesian_controller::cartesian_task::force_space_dimension"
-    force_space_axis:        str = "opensai::controllers::Titania::cartesian_controller::cartesian_task::force_space_axis"
-    desired_force:           str = "opensai::controllers::Titania::cartesian_controller::cartesian_task::desired_force"
-    moment_space_dim:        str = "opensai::controllers::Titania::cartesian_controller::cartesian_task::moment_space_dimension"
-    desired_moment:          str = "opensai::controllers::Titania::cartesian_controller::cartesian_task::desired_moment"
-    closed_loop_force_ctrl:  str = "opensai::controllers::Titania::cartesian_controller::cartesian_task::closed_loop_force_control"
-    linear_vel_sat_limit:    str = "opensai::controllers::Titania::cartesian_controller::cartesian_task::linear_velocity_saturation_limit"
-    vel_sat_enabled:         str = "opensai::controllers::Titania::cartesian_controller::cartesian_task::velocity_saturation_enabled"
+    force_space_dim:         str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::force_space_dimension"
+    force_space_axis:        str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::force_space_axis"
+    desired_force:           str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::desired_force"
+    moment_space_dim:        str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::moment_space_dimension"
+    desired_moment:          str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::desired_moment"
+    closed_loop_force_ctrl:  str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::closed_loop_force_control"
+    linear_vel_sat_limit:    str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::linear_velocity_saturation_limit"
+    angular_vel_sat_limit:   str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::angular_velocity_saturation_limit"
+    vel_sat_enabled:         str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::velocity_saturation_enabled"
 
 KEYS = RedisKeys()
 
 def set_linear_vel_limit(r, limit):
     # r.set(KEYS.vel_sat_enabled,    "1")
     r.set(KEYS.linear_vel_sat_limit, str(limit))
+
+
+# ============================================================
+# STRING GEOMETRY  (from controller.cpp calibration)
+# Positions and orientations of each string in world frame.
+# ============================================================
+
+if not IS_REAL:
+    STRING_POSITIONS = [
+        np.array([0.867011, -0.140365, 0.266309]),   # string 0 (G)
+        np.array([0.907412, -0.119718, 0.279737]),   # string 1 (D)
+        np.array([0.924652, -0.117822, 0.274284]),   # string 2 (A)
+        np.array([0.945377, -0.116711, 0.255744]),   # string 3 (E)
+    ]
+
+    STRING_ORIENTATIONS = [
+        np.array([[ 0.0934987, -0.511516, -0.854171],
+                [-0.994479,  -0.00692422, -0.10471],
+                [ 0.0476466,  0.859246,  -0.50934 ]]),  # string 0
+        np.array([[ 0.0374749, -0.207924, -0.977427],
+                [-0.998624,   0.0281047, -0.0442662],
+                [ 0.0366743,  0.977741,  -0.206585]]),  # string 1
+        np.array([[-0.0108152,  0.0953699, -0.995383],
+                [-0.999024,   0.0416067,  0.0148412],
+                [ 0.0428301,  0.994572,   0.0948269]]),  # string 2
+        np.array([[-0.063477,   0.480517,  -0.874685],
+                [-0.99537,    0.0329028,  0.0903107],
+                [ 0.0721755,  0.876368,   0.476204 ]]),  # string 3
+    ]
+
+else:
+    STRING_POSITIONS = [0.0, 0.0, 0.0, 0.0]
+    STRING_ORIENTATIONS = [0.0, 0.0, 0.0, 0.0]
 
 # ============================================================
 # STATES
@@ -146,21 +191,27 @@ def main():
     home_ori = get_ori(r)
     print(f"Home position: {home_pos}")
 
-    # String geometry for the target string
-    # str_pos = STRING_POSITIONS[TARGET_STRING]
-    # str_ori = STRING_ORIENTATIONS[TARGET_STRING]
-    # str_normal   = str_ori[:, 2]   # Z column — normal to string
-    # str_bow_dir  = str_ori[:, 0]   # X column — bowing direction
+    if not CALIBRATION:
+        print("Using hardcoded string geometry (from controller.cpp calibration):")
+        # String geometry for the target string
+        # STRING_ORIENTATIONS are recorded in bow frame; controller tracks flange frame.
+        # Transform: R_world_flange = R_world_bow @ R_bow_in_flange.T
+
+        R_bow_in_flange = np.array([[0, 0, 1], [-1, 0, 0], [0, -1, 0]])
+        str_pos = STRING_POSITIONS[TARGET_STRING]
+        str_ori = STRING_ORIENTATIONS[TARGET_STRING] @ R_bow_in_flange.T
+        str_normal   = str_ori[:, 2]   # Z column — normal to string
+        str_bow_dir  = str_ori[:, 0]   # X column — bowing direction
 
     # ── State machine variables ──────────────────────────────
     state            = State.CALIBRATING
-    contact_goal_pos = home_pos.copy()  # updated in CONTACTING
+    contact_goal_pos = home_pos.copy()
     bow_displacement = 0.0
-    bow_dir          = 1.0              # +1 or -1
+    bow_dir          = 1.0
 
     # Calibration storage — start from hardcoded, updated by user
-    cal_positions    = [0.0, 0.0, 0.0, 0.0]
-    cal_orientations = [0.0, 0.0, 0.0, 0.0]
+    cal_positions    = list(STRING_POSITIONS)
+    cal_orientations = list(STRING_ORIENTATIONS)
 
     # Start single keyboard thread
     threading.Thread(target=_key_input_thread, daemon=True).start()
@@ -176,6 +227,7 @@ def main():
     # enable velocity saturation
     r.set(KEYS.vel_sat_enabled,    "1")
     set_linear_vel_limit(r, MOVING_SPEED)
+    r.set(KEYS.angular_vel_sat_limit, str(ANGULAR_SPEED))
     set_floating(r)
 
     try:
@@ -187,6 +239,7 @@ def main():
             cur_ori = get_ori(r)
 
             # during first state, get initial force sensor readings to find bias and remove later on (TODO)
+        
 
             # ── CALIBRATING ──────────────────────────────────────────────
             if state == State.CALIBRATING:
@@ -214,9 +267,9 @@ def main():
                         str_bow_dir = str_ori[:, 0]
                         r.set(KEYS.active_controller, "cartesian_controller")
                         set_position_control(r)
-                        time.sleep(0.1)
-                        print(f"\nState: HOMING")
+                        time.sleep(0.1)  # wait for controller to switch and update readings
                         set_goal(r, home_pos, home_ori)
+                        print(f"\nState: HOMING")
                         state = State.HOMING
 
             # ── HOMING ───────────────────────────────────────────────────
@@ -227,15 +280,17 @@ def main():
                     print(f"  HOMING  pos_err={p_err:.4f}  ori_err={o_err:.4f}")
                     last_print = loop_time
 
-                # if not key_queue.empty() and key_queue.get().strip() == '':
-                #     contact_goal_pos = str_pos - 0.05 * str_normal
-                #     set_linear_vel_limit(r, MOVING_SPEED)
-                #     print(f"\nState: PLACING  (approaching string {TARGET_STRING})")
-                #     set_goal(r, contact_goal_pos, str_ori)
-                #     state = State.PLACING
+                if not key_queue.empty() and key_queue.get().strip() == '':
+                    contact_goal_pos = str_pos - 0.05 * str_normal
+                    set_linear_vel_limit(r, MOVING_SPEED)
+                    print(f"\nState: PLACING  (approaching string {TARGET_STRING})")
+                    set_goal(r, contact_goal_pos, str_ori)
+                    state = State.PLACING
 
             # ── PLACING ───────────────────────────────────────────────
             elif state == State.PLACING:
+
+
                 p_err = pos_err(contact_goal_pos, cur_pos)
                 o_err = ori_err(str_ori, cur_ori)
 
@@ -243,17 +298,19 @@ def main():
                     print(f"  PLACING  pos_err={p_err:.4f}  ori_err={o_err:.4f}")
                     last_print = loop_time
 
-                # if p_err < 0.02 and o_err < 0.1:
-                #     # creep toward string along normal
-                #     contact_goal_pos = cur_pos + 0.1 * str_normal
-                #     set_linear_vel_limit(r, CONTACT_APPROACH_SPEED)
-                #     set_goal(r, contact_goal_pos, str_ori)
-                #     state = State.CONTACTING
+                if p_err < 0.02 and o_err < 0.1:
+                    # creep toward string along normal
+                    contact_goal_pos = cur_pos + 0.1 * str_normal
+                    set_linear_vel_limit(r, CONTACT_APPROACH_SPEED)
+                    set_goal(r, contact_goal_pos, str_ori)
+                    state = State.CONTACTING
 
 
             # ── CONTACTING ─────────────────────────────────────────────
             elif state == State.CONTACTING:
                 # move goal toward string along normal at constant speed
+
+
                 force_local = get_force(r)
                 force_world = cur_ori @ force_local          # rotate to world frame
                 force_normal = np.dot(force_world, str_normal)  # scalar projection onto normal
@@ -264,15 +321,15 @@ def main():
                     print(f"  CONTACTING  goal={contact_goal_pos.round(4)}  |F|={force_normal_mag:.3f} N")
                     last_print = loop_time
 
-                # if force_normal_mag > CONTACT_FORCE_THRESHOLD:
-                #     print(f"\nState: BOWING  (contact detected |F|={force_normal_mag:.3f} N)")
-                #     bow_dir = 1.0
-                #     # Enable force control along string normal
-                #     r.set(KEYS.force_space_dim,  "1")
-                #     r.set(KEYS.force_space_axis, json.dumps(str_normal.tolist()))
-                #     r.set(KEYS.desired_force,    json.dumps((DESIRED_BOW_FORCE * str_normal).tolist()))
-                #     set_linear_vel_limit(r, BOW_SPEED)
-                #     state = State.BOWING
+                if force_normal_mag > CONTACT_FORCE_THRESHOLD:
+                    print(f"\nState: BOWING  (contact detected |F|={force_normal_mag:.3f} N)")
+                    bow_dir = 1.0
+                    # Enable force control along string normal
+                    r.set(KEYS.force_space_dim,  "1")
+                    r.set(KEYS.force_space_axis, json.dumps(str_normal.tolist()))
+                    r.set(KEYS.desired_force,    json.dumps((DESIRED_BOW_FORCE * str_normal).tolist()))
+                    set_linear_vel_limit(r, BOW_SPEED)
+                    state = State.BOWING
 
             elif state == State.BOWING:
                 bow_displacement = np.dot(cur_pos - str_pos, str_bow_dir)
