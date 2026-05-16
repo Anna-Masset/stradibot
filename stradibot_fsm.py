@@ -40,7 +40,7 @@ ANGULAR_SPEED           = np.pi/6    # rad/s — for orientation corrections dur
 BOW_OFFSET              = 0.35   # m   — offset along bow direction from string position
 
 IS_REAL = False
-CALIBRATION = True
+CALIBRATION = False
 
 if IS_REAL:
     CONFIG_FILE = "stradibot.xml"
@@ -316,12 +316,12 @@ def main():
                     print(f"  PLACING  pos_err={p_err:.4f}  ori_err={o_err:.4f}")
                     last_print = loop_time
 
-                if p_err < 0.02 and o_err < 0.1:
-                    # creep toward string along normal
-                    contact_goal_pos = cur_pos + 0.1 * str_normal
-                    set_linear_vel_limit(r, CONTACT_APPROACH_SPEED)
-                    set_goal(r, contact_goal_pos, str_ori)
-                    state = State.CONTACTING
+                # if p_err < 0.02 and o_err < 0.1:
+                #     # creep toward string along normal
+                #     contact_goal_pos = cur_pos + 0.1 * str_normal
+                #     set_linear_vel_limit(r, CONTACT_APPROACH_SPEED)
+                #     set_goal(r, contact_goal_pos, str_ori)
+                #     state = State.CONTACTING
 
 
             # ── CONTACTING ─────────────────────────────────────────────
@@ -339,15 +339,15 @@ def main():
                     print(f"  CONTACTING  goal={contact_goal_pos.round(4)}  |F|={force_normal_mag:.3f} N")
                     last_print = loop_time
 
-                if force_normal_mag > CONTACT_FORCE_THRESHOLD:
-                    print(f"\nState: BOWING  (contact detected |F|={force_normal_mag:.3f} N)")
-                    bow_dir = 1.0
-                    # Enable force control along string normal
-                    r.set(KEYS.force_space_dim,  "1")
-                    r.set(KEYS.force_space_axis, json.dumps(str_normal.tolist()))
-                    r.set(KEYS.desired_force,    json.dumps((DESIRED_BOW_FORCE * str_normal).tolist()))
-                    set_linear_vel_limit(r, BOW_SPEED)
-                    state = State.BOWING
+                # if force_normal_mag > CONTACT_FORCE_THRESHOLD:
+                #     print(f"\nState: BOWING  (contact detected |F|={force_normal_mag:.3f} N)")
+                #     bow_dir = 1.0
+                #     # Enable force control along string normal
+                #     r.set(KEYS.force_space_dim,  "1")
+                #     r.set(KEYS.force_space_axis, json.dumps(str_normal.tolist()))
+                #     r.set(KEYS.desired_force,    json.dumps((DESIRED_BOW_FORCE * str_normal).tolist()))
+                #     set_linear_vel_limit(r, BOW_SPEED)
+                #     state = State.BOWING
 
             # ── BOWING ─────────────────────────────────────────────
             elif state == State.BOWING:
@@ -378,12 +378,14 @@ def main():
                 #     if new_string is not None and new_string != TARGET_STRING:
                 #         TARGET_STRING = new_string
                 #         set_position_control(r)
+                #         time.sleep(0.1)
                 #         str_ori     = cal_orientations[TARGET_STRING]
                 #         str_pos     = cal_positions[TARGET_STRING]
                 #         str_normal  = str_ori[:, 2]
                 #         str_bow_dir = str_ori[:, 0]
                 #         contact_goal_pos = str_pos - 0.05 * str_normal
                 #         set_linear_vel_limit(r, MOVING_SPEED)
+                #         set_goal(r, contact_goal_pos, str_ori)
                 #         print(f"\nSwitching to string {TARGET_STRING} → PLACING")
                 #         state = State.PLACING
 
