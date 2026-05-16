@@ -37,8 +37,9 @@ BOW_SPEED               = 0.06   # m/s
 BOW_AMPLITUDE           = 0.15   # m   — half-stroke
 DESIRED_BOW_FORCE       = 1.0    # N   — normal force on string
 ANGULAR_SPEED           = np.pi/6    # rad/s — for orientation corrections during bowing
+BOW_OFFSET              = 0.35   # m   — offset along bow direction from string position
 
-IS_REAL = True
+IS_REAL = False
 CALIBRATION = True
 
 if IS_REAL:
@@ -94,7 +95,7 @@ def set_linear_vel_limit(r, limit):
 # Positions and orientations of each string in world frame.
 # ============================================================
 
-if not IS_REAL:
+if not CALIBRATION:
     STRING_POSITIONS = [
         np.array([0.867011, -0.140365, 0.266309]),   # string 0 (G)
         np.array([0.907412, -0.119718, 0.279737]),   # string 1 (D)
@@ -119,7 +120,7 @@ if not IS_REAL:
 
 else:
     STRING_POSITIONS = [0.0, 0.0, 0.0, 0.0]
-    STRING_ORIENTATIONS = [0.0, 0.0, 0.0, 0.0]
+    STRING_ORIENTATIONS = [np.eye(3), np.eye(3), np.eye(3), np.eye(3)]
 
 # ============================================================
 # STATES
@@ -165,6 +166,14 @@ def pos_err(target, current):
 def ori_err(target, current):
     return np.linalg.norm(target - current)
 
+def apply_string_geometry(raw_pos, ori):
+    """Given a string position and orientation (already in correct frame),
+    return (str_pos with bow offset, str_normal, str_bow_dir)."""
+    normal  = ori[:, 2]
+    bow_dir = ori[:, 0]
+    pos = raw_pos + BOW_OFFSET * bow_dir
+    return pos, normal, bow_dir
+
 # Single keyboard thread — all input goes into key_queue
 key_queue = queue.Queue()
 
@@ -177,6 +186,7 @@ def _key_input_thread():
 # ============================================================
 
 def main():
+    global TARGET_STRING
     r = redis.Redis()
 
     # Verify correct config file
@@ -195,27 +205,30 @@ def main():
     home_ori = get_ori(r)
     print(f"Home position: {home_pos}")
 
+    # Build cal_positions / cal_orientations with BOW_OFFSET already baked in.
+    # For sim: hardcoded values are in bow frame → transform to flange frame first.
     if not CALIBRATION:
-        print("Using hardcoded string geometry (from controller.cpp calibration):")
-        # String geometry for the target string
-        # STRING_ORIENTATIONS are recorded in bow frame; controller tracks flange frame.
-        # Transform: R_world_flange = R_world_bow @ R_bow_in_flange.T
-
         R_bow_in_flange = np.array([[0, 0, 1], [-1, 0, 0], [0, -1, 0]])
-        str_pos = STRING_POSITIONS[TARGET_STRING]
-        str_ori = STRING_ORIENTATIONS[TARGET_STRING] @ R_bow_in_flange.T
-        str_normal   = str_ori[:, 2]   # Z column — normal to string
-        str_bow_dir  = str_ori[:, 0]   # X column — bowing direction
+        cal_orientations = [o @ R_bow_in_flange.T for o in STRING_ORIENTATIONS] 
+    else:
+        cal_orientations = list(STRING_ORIENTATIONS)
+    
+    cal_positions = [
+        p + BOW_OFFSET * cal_orientations[i][:, 0]
+        for i, p in enumerate(STRING_POSITIONS)
+    ]  
+
+    # Active string geometry (updated on calibration or string switch)
+    str_ori     = cal_orientations[TARGET_STRING]
+    str_pos     = cal_positions[TARGET_STRING]
+    str_normal  = str_ori[:, 2]
+    str_bow_dir = str_ori[:, 0]
 
     # ── State machine variables ──────────────────────────────
-    state            = State.CALIBRATING
+    state            = State.CALIBRATING if CALIBRATION else State.HOMING
     contact_goal_pos = home_pos.copy()
     bow_displacement = 0.0
     bow_dir          = 1.0
-
-    # Calibration storage — start from hardcoded, updated by user
-    cal_positions    = list(STRING_POSITIONS)
-    cal_orientations = list(STRING_ORIENTATIONS)
 
     # Start single keyboard thread
     threading.Thread(target=_key_input_thread, daemon=True).start()
@@ -233,7 +246,11 @@ def main():
     set_linear_vel_limit(r, MOVING_SPEED)
     r.set(KEYS.angular_vel_sat_limit, str(ANGULAR_SPEED))
     r.set(KEYS.angular_vel_sat_limit, str(ANGULAR_SPEED))
-    set_floating(r)
+
+    if CALIBRATION:
+        set_floating(r)
+    else:
+        set_position_control(r)
     # set_goal(r, np.array([ 0.940193, -0.078024,  0.310439]), home_ori)
 
     try:
@@ -252,20 +269,21 @@ def main():
                     key = key_queue.get().strip()
                     if key in ('1', '2', '3', '4'):
                         r.set(KEYS.active_controller, "cartesian_controller")
-                        time.sleep(0.1)  # wait for controller to switch and update readings
+                        time.sleep(0.1)
                         idx = int(key) - 1
-                        cal_positions[idx]    = get_pos(r).copy()
-                        cal_orientations[idx] = get_ori(r).copy()
+                        raw_ori = get_ori(r).copy()
+                        raw_pos = get_pos(r).copy()
+                        cal_orientations[idx] = raw_ori
+                        cal_positions[idx]    = raw_pos 
                         print(f"  String {key} registered: pos={cal_positions[idx].round(4)}")
-                        time.sleep(0.1)  # wait for controller to switch and update readings
-                        set_floating(r)  # back to floating after position control to register
+                        time.sleep(0.1)
+                        set_floating(r)
                     elif key == '':  # bare Enter → done
                         print("\nCalibrated positions:")
                         for i, p in enumerate(cal_positions):
                             print(f"  String {i+1}: {p.round(4)}")
-                        # apply calibrated values for target string
-                        str_pos = cal_positions[TARGET_STRING]
-                        str_ori = cal_orientations[TARGET_STRING]
+                        str_ori     = cal_orientations[TARGET_STRING]
+                        str_pos     = cal_positions[TARGET_STRING]
                         str_normal  = str_ori[:, 2]
                         str_bow_dir = str_ori[:, 0]
                         r.set(KEYS.active_controller, "cartesian_controller")
@@ -321,26 +339,27 @@ def main():
                     print(f"  CONTACTING  goal={contact_goal_pos.round(4)}  |F|={force_normal_mag:.3f} N")
                     last_print = loop_time
 
-                # if force_normal_mag > CONTACT_FORCE_THRESHOLD:
-                #     print(f"\nState: BOWING  (contact detected |F|={force_normal_mag:.3f} N)")
-                #     bow_dir = 1.0
-                #     # Enable force control along string normal
-                #     r.set(KEYS.force_space_dim,  "1")
-                #     r.set(KEYS.force_space_axis, json.dumps(str_normal.tolist()))
-                #     r.set(KEYS.desired_force,    json.dumps((DESIRED_BOW_FORCE * str_normal).tolist()))
-                #     set_linear_vel_limit(r, BOW_SPEED)
-                #     state = State.BOWING
+                if force_normal_mag > CONTACT_FORCE_THRESHOLD:
+                    print(f"\nState: BOWING  (contact detected |F|={force_normal_mag:.3f} N)")
+                    bow_dir = 1.0
+                    # Enable force control along string normal
+                    r.set(KEYS.force_space_dim,  "1")
+                    r.set(KEYS.force_space_axis, json.dumps(str_normal.tolist()))
+                    r.set(KEYS.desired_force,    json.dumps((DESIRED_BOW_FORCE * str_normal).tolist()))
+                    set_linear_vel_limit(r, BOW_SPEED)
+                    state = State.BOWING
 
+            # ── BOWING ─────────────────────────────────────────────
             elif state == State.BOWING:
                 bow_displacement = np.dot(cur_pos - str_pos, str_bow_dir)
 
                 force_local = get_force(r)
-                force_world = cur_ori @ force_local          # rotate to world frame
-                force_normal = np.dot(force_world, str_normal)  # scalar projection onto normal
+                force_world = cur_ori @ force_local
+                force_normal = np.dot(force_world, str_normal)
                 force_normal_mag = np.linalg.norm(force_normal)
 
                 if loop_time - last_print > 0.5:
-                    print(f"  BOWING  goal={bowing_goal_pos.round(4)}  |F|={force_normal_mag:.3f} N")
+                    print(f"  BOWING str={TARGET_STRING}  |F|={force_normal_mag:.3f} N")
                     last_print = loop_time
 
                 # Bowing motion along str_bow_dir
@@ -350,8 +369,23 @@ def main():
                     bow_dir = 1.0
 
                 bowing_goal_pos = str_pos + bow_dir * BOW_AMPLITUDE * str_bow_dir
-
                 set_goal(r, bowing_goal_pos, str_ori)
+
+                # Check for string switch keypress (5→str0, 6→str1, 7→str2, 8→str3)
+                # if not key_queue.empty():
+                #     key = key_queue.get().strip()
+                #     new_string = {'5': 0, '6': 1, '7': 2, '8': 3}.get(key)
+                #     if new_string is not None and new_string != TARGET_STRING:
+                #         TARGET_STRING = new_string
+                #         set_position_control(r)
+                #         str_ori     = cal_orientations[TARGET_STRING]
+                #         str_pos     = cal_positions[TARGET_STRING]
+                #         str_normal  = str_ori[:, 2]
+                #         str_bow_dir = str_ori[:, 0]
+                #         contact_goal_pos = str_pos - 0.05 * str_normal
+                #         set_linear_vel_limit(r, MOVING_SPEED)
+                #         print(f"\nSwitching to string {TARGET_STRING} → PLACING")
+                #         state = State.PLACING
 
 
     except KeyboardInterrupt:

@@ -30,7 +30,7 @@
 		<motionForceTask name="cartesian_task"
 			linkName="flange"
 			parametrizationInCompliantFrame="false">
-			<compliantFrame xyz="-0.35 0 0.05" rpy="0 0 0" />
+			<!-- <compliantFrame xyz="-0.35 0 0.05" rpy="0 0 0" /> -->
 			<velocitySaturation enabled="true" />
 			<otg type="disabled" />
 		</motionForceTask>
