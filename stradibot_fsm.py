@@ -39,6 +39,8 @@ BOW_SPEED               = 0.1   # m/s
 BOW_AMPLITUDE           = 0.07   # m   — half-stroke
 DESIRED_BOW_FORCE       = 1.7    # N   — normal force on string
 BOW_OFFSET              = 0.35   # m   — offset along bow direction from string position
+LIFT_HEIGHT             = 0.05   # m   — how far to lift along string normal when switching
+MOVE_THRESHOLD          = 0.15   # m   — lateral distance along bow dir to stop above new string
 
 IS_REAL = True
 CALIBRATION = True
@@ -132,6 +134,8 @@ class State(Enum):
     PLACING     = auto()
     CONTACTING  = auto()
     BOWING      = auto()
+    LIFTING     = auto()
+    MOVING      = auto()
 
 # ============================================================
 # HELPERS
@@ -386,24 +390,48 @@ def main():
                         homing_safety(r, home_pos, home_ori)
                         state = state.HOMING
 
-                # Check for string switch keypress (5→str0, 6→str1, 7→str2, 8→str3)
-                # if not key_queue.empty():
-                #     key = key_queue.get().strip()
-                #     new_string = {'5': 0, '6': 1, '7': 2, '8': 3}.get(key)
-                #     if new_string is not None and new_string != TARGET_STRING:
-                #         TARGET_STRING = new_string
-                #         set_position_control(r)
-                #         time.sleep(0.1)
-                #         str_ori     = cal_orientations[TARGET_STRING]
-                #         str_pos     = cal_positions[TARGET_STRING]
-                #         str_normal  = str_ori[:, 2]
-                #         str_bow_dir = str_ori[:, 0]
-                #         contact_goal_pos = str_pos - 0.05 * str_normal
-                #         set_linear_vel_limit(r, MOVING_SPEED)
-                #         set_goal(r, contact_goal_pos, str_ori)
-                #         print(f"\nSwitching to string {TARGET_STRING} → PLACING")
-                #         state = State.PLACING
+                if not key_queue.empty():
+                    key = key_queue.get().strip()
+                    new_string = {'5': 0, '6': 1, '7': 2, '8': 3}.get(key)
+                    if new_string is not None and new_string != TARGET_STRING:
+                        TARGET_STRING = new_string
+                        set_position_control(r)
+                        time.sleep(0.1)
+                        lift_goal_pos = cur_pos - LIFT_HEIGHT * str_normal
+                        set_linear_vel_limit(r, MOVING_SPEED)
+                        set_goal(r, lift_goal_pos, str_ori)
+                        print(f"\nSwitching to string {TARGET_STRING} → LIFTING")
+                        state = State.LIFTING
 
+            # ── LIFTING ─────────────────────────────────────────────
+            elif state == State.LIFTING:
+                p_err = pos_err(lift_goal_pos, cur_pos)
+                if loop_time - last_print > 0.5:
+                    print(f"  LIFTING  pos_err={p_err:.4f}")
+                    last_print = loop_time
+
+                if p_err < 0.02:
+                    str_ori     = cal_orientations[TARGET_STRING]
+                    str_pos     = cal_positions[TARGET_STRING]
+                    str_normal  = str_ori[:, 2]
+                    str_bow_dir = str_ori[:, 0]
+                    move_goal_pos = str_pos - 0.05 * str_normal
+                    set_goal(r, move_goal_pos, str_ori)
+                    print(f"\nState: MOVING  (toward string {TARGET_STRING})")
+                    state = State.MOVING
+
+            # ── MOVING ──────────────────────────────────────────────
+            elif state == State.MOVING:
+                lateral_dist = abs(np.dot(cur_pos - str_pos, str_bow_dir))
+                if loop_time - last_print > 0.5:
+                    print(f"  MOVING  lateral_dist={lateral_dist:.4f}")
+                    last_print = loop_time
+
+                if lateral_dist <= MOVE_THRESHOLD:
+                    contact_goal_pos = str_pos - 0.05 * str_normal
+                    set_goal(r, contact_goal_pos, str_ori)
+                    print(f"\nState: PLACING  (descending to string {TARGET_STRING})")
+                    state = State.PLACING
 
     except KeyboardInterrupt:
         print("\nStopped.")
