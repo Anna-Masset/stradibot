@@ -26,27 +26,37 @@ from dataclasses import dataclass
 # ============================================================
 
 CONTROLLER     = "cartesian_controller"
-LOOP_DT        = 0.01   # 100 Hz
+LOOP_DT        = 0.01   # 100 Hz    
 
 TARGET_STRING  = 1       # which string to bow (0=G, 1=D, 2=A, 3=E)
 
-MOVING_SPEED            = 0.1    # m/s — how fast to move when not contacting
+MOVING_SPEED            = 0.05    # m/s — how fast to move when not contacting
 CONTACT_APPROACH_SPEED  = 0.03   # m/s — how fast to creep toward the string
-ANGULAR_SPEED           = np.pi/6    # rad/s — for orientation corrections during bowing
+ANGULAR_SPEED           = np.pi/8    # rad/s — for orientation corrections during bowing
 SAFETY_SPEED            = 0.04
-CONTACT_FORCE_THRESHOLD = 2.0    # N   — force magnitude to detect contact
+CONTACT_FORCE_THRESHOLD = 1.2    # N   — force magnitude to detect contact
 BOW_SPEED               = 0.1   # m/s
+# BOW_SPEED               = 0.01
 BOW_AMPLITUDE           = 0.07   # m   — half-stroke
-DESIRED_BOW_FORCE       = 1.7    # N   — normal force on string
+# DESIRED_BOW_FORCE       = 0.7    # N   — normal force on string
+DESIRED_BOW_FORCE       = 1.3
+DESIRED_BOW_MOMENT       = 0.2
+# DESIRED_BOW_MOMENT       = 0.14
 BOW_OFFSET              = 0.35   # m   — offset along bow direction from string position
-LIFT_HEIGHT             = 0.05   # m   — how far to lift along string normal when switching
+LIFT_HEIGHT             = 0.03   # m   — how far to lift along string normal when switching
 MOVE_THRESHOLD          = 0.15   # m   — lateral distance along bow dir to stop above new string
+
+CHEAT_FORCE_MIN               = 0.8
+CHEAT_FORCE_MAX               = 1.2
+CHEAT_SETTLE_TIME              = 0.1
+CHEAT_POS_STEP                = 0.0003  # m per loop — bow goal nudge along str_normal (~5 cm/s @ 100 Hz)
 
 IS_REAL = True
 CALIBRATION = True
 
 if IS_REAL:
-    CONFIG_FILE = "stradibot.xml"
+    # CONFIG_FILE = "stradibot.xml"
+    CONFIG_FILE = "enzo_test.xml"
 else:
     CONFIG_FILE = "stradibot_simviz.xml"
 
@@ -71,7 +81,9 @@ class RedisKeys:
     # force sensor (local frame, 3D vector)
     joint_task_kp:       str = f"opensai::controllers::{robot_name}::joint_controller::joint_task::kp"
     if IS_REAL:
-        ft_force:            str = "opensai::sensors::Titania::ft_sensor::tcp_force"
+        # ft_force:            str = "opensai::sensors::Titania::ft_sensor::tcp_force"
+        ft_force:            str = "opensai::sensors::Titania::ft_sensor::flange::force"
+
     else:
         ft_force:            str = f"opensai::sensors::{robot_name}::ft_sensor::bow::force"
 
@@ -79,12 +91,13 @@ class RedisKeys:
     force_space_dim:         str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::force_space_dimension"
     force_space_axis:        str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::force_space_axis"
     desired_force:           str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::desired_force"
+    desired_moment:           str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::desired_moment"
     moment_space_dim:        str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::moment_space_dimension"
-    desired_moment:          str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::desired_moment"
-    closed_loop_force_ctrl:  str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::closed_loop_force_control"
+    moment_space_axis:        str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::moment_space_axis"
     linear_vel_sat_limit:    str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::otg_max_linear_velocity"
     angular_vel_sat_limit:   str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::otg_max_angular_velocity"
     vel_sat_enabled:         str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::velocity_saturation_enabled"
+    closed_loop:             str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::closed_loop_force_control"
 
 KEYS = RedisKeys()
 
@@ -133,6 +146,7 @@ class State(Enum):
     HOMING      = auto()
     PLACING     = auto()
     CONTACTING  = auto()
+    CHEATING    = auto()
     BOWING      = auto()
     LIFTING     = auto()
     MOVING      = auto()
@@ -180,6 +194,7 @@ def apply_string_geometry(raw_pos, ori):
 
 def homing_safety(r, home_pos, home_ori):
     r.set(KEYS.active_controller, "cartesian_controller")
+    r.set(KEYS.closed_loop,      "0")
     set_position_control(r)
     time.sleep(0.1)  # wait for controller to switch and update readings
     set_linear_vel_limit(r, SAFETY_SPEED)
@@ -295,12 +310,19 @@ def main():
                         str_ori     = cal_orientations[TARGET_STRING]
                         str_pos     = cal_positions[TARGET_STRING]
                         str_normal  = str_ori[:, 2]
+                        str_moment  = str_ori[:, 1]
                         str_bow_dir = str_ori[:, 0]
-                        r.set(KEYS.active_controller, "cartesian_controller")
+                        r.set(KEYS.active_controller, "cartesian_controller")                    
                         time.sleep(0.1)  # wait for controller to switch and update readings
+                        # r.set(KEYS.moment_space_dim, "1")
+                        # r.set(KEYS.moment_space_axis, json.dumps(np.array([1, 0, 0]).tolist()))
+                        # r.set(KEYS.desired_moment,    json.dumps((DESIRED_BOW_MOMENT * np.array([1, 0, 0])).tolist()))
+                        # time.sleep(0.1)
                         set_goal(r, home_pos, home_ori)
                         print(f"\nState: HOMING")
                         state = State.HOMING
+                        continue
+
 
             # ── HOMING ───────────────────────────────────────────────────
             elif state == State.HOMING:
@@ -348,19 +370,66 @@ def main():
                     last_print = loop_time
 
                 if force_normal_mag > CONTACT_FORCE_THRESHOLD:
-                    print(f"\nState: BOWING  (contact detected |F|={force_normal_mag:.3f} N)")
-                    bow_dir = 1.0
-                    # Enable force control along string normal
-                    r.set(KEYS.force_space_dim,  "1")
-                    r.set(KEYS.force_space_axis, json.dumps(str_normal.tolist()))
-                    r.set(KEYS.desired_force,    json.dumps((DESIRED_BOW_FORCE * str_normal).tolist()))
+                    print(f"\nState: CHEATING  (contact detected |F|={force_normal_mag:.3f} N)")
+                    bow_dir = 1.0 ## starting to the left 
+                    DESIRED_BOW_MOMENT = 0.1
+
+                    # Pure position control — we'll nudge cheat_goal_pos along str_normal based on force feedback
+                    # set_position_control(r)
+                    # cheat_settle_start = None
+                    # cheat_goal_pos = cur_pos.copy()
+                    # set_goal(r, cheat_goal_pos, str_ori)
+                    # state = State.CHEATING
+
+                    # r.set(KEYS.force_space_dim,  "1")
+                    # r.set(KEYS.force_space_axis, json.dumps(str_normal.tolist()))
+                    # r.set(KEYS.desired_force,    json.dumps((DESIRED_BOW_FORCE * str_normal).tolist()))
+                    # r.set(KEYS.closed_loop,      "1")
+
+                    r.set(KEYS.moment_space_dim, "1")
+                    r.set(KEYS.moment_space_axis, json.dumps(str_moment.tolist()))
+                    r.set(KEYS.desired_moment,    json.dumps((DESIRED_BOW_MOMENT * str_moment).tolist()))
                     set_linear_vel_limit(r, BOW_SPEED)
                     state = State.BOWING
 
 
-                    # print('Going back to homing position')
-                    # set_goal(r, home_pos, home_ori)
-                    # state = state.HOMING
+            # ── CHEATING ───────────────────────────────────────────
+            # Pure position control. Reads force sensor; if magnitude is outside
+            # [CHEAT_FORCE_MIN, CHEAT_FORCE_MAX] band, nudge cheat_goal_pos along
+            # str_normal by a fixed step. +str_normal points INTO the string, so
+            # reaction force_normal is negative when pressing: too-pressed → back
+            # off (-str_normal); too-light → push in (+str_normal).
+            # elif state == State.CHEATING:
+            #     force_local = get_force(r)
+            #     force_world = cur_ori @ force_local
+            #     force_normal = np.dot(force_world, str_normal)  # signed
+            #     force_normal_mag = abs(force_normal)
+
+            #     if force_normal_mag > CHEAT_FORCE_MAX:
+            #         cheat_goal_pos -= CHEAT_POS_STEP * str_normal
+            #         set_goal(r, cheat_goal_pos, str_ori)
+            #         cheat_settle_start = None
+            #     elif force_normal_mag < CHEAT_FORCE_MIN:
+            #         cheat_goal_pos += CHEAT_POS_STEP * str_normal
+            #         set_goal(r, cheat_goal_pos, str_ori)
+            #         cheat_settle_start = None
+            #     else:
+            #         if cheat_settle_start is None:
+            #             cheat_settle_start = loop_time
+            #         elif loop_time - cheat_settle_start >= CHEAT_SETTLE_TIME:
+            #             print(f"  Switching to BOWING str={TARGET_STRING}  Force stabilized at |F|={force_normal_mag:.3f} N")
+            #             str_pos = cur_pos.copy()  # anchor bow sweep around the settled contact point
+            #             set_goal(r, cur_pos.copy(), str_ori)
+            #             set_linear_vel_limit(r, BOW_SPEED)
+            #             bow_dir = 1.0
+            #             bow_normal_offset = 0.0  # impedance drift along str_normal during BOWING
+            #             state = State.BOWING
+
+            #     if loop_time - last_print > 0.5:
+            #         settled = (loop_time - cheat_settle_start) if cheat_settle_start else 0.0
+            #         print(f"  CHEATING F_n={force_normal:+.3f} N |F|={force_normal_mag:.3f} N settled={settled:.2f}s")
+            #         last_print = loop_time
+
 
             # ── BOWING ─────────────────────────────────────────────
             elif state == State.BOWING:
@@ -369,20 +438,47 @@ def main():
                 force_local = get_force(r)
                 force_world = cur_ori @ force_local
                 force_normal = np.dot(force_world, str_normal)
-                force_normal_mag = np.linalg.norm(force_normal)
+                force_normal_mag = abs(force_normal)
 
+                # ── PURE POSITION BOWING (no force feedback) — kept for fallback ──
                 if loop_time - last_print > 0.5:
                     print(f"  BOWING str={TARGET_STRING}  |F|={force_normal_mag:.3f} N")
                     last_print = loop_time
-
-                # Bowing motion along str_bow_dir
+                
                 if bow_displacement >= BOW_AMPLITUDE * 0.9:
                     bow_dir = -1.0
+                    DESIRED_BOW_MOMENT = 0.4
                 elif bow_displacement <= -BOW_AMPLITUDE * 0.9:
                     bow_dir = 1.0
+                    DESIRED_BOW_MOMENT = 0.1
 
+                r.set(KEYS.desired_moment,    json.dumps((DESIRED_BOW_MOMENT * str_moment).tolist()))
+                
                 bowing_goal_pos = str_pos + bow_dir * BOW_AMPLITUDE * str_bow_dir
                 set_goal(r, bowing_goal_pos, str_ori)
+
+                # ── IMPEDANCE-STYLE BOWING: sweep along str_bow_dir, nudge along str_normal ──
+                # Same band logic as CHEATING: drift the goal toward/away from string
+                # to keep |F| in [CHEAT_FORCE_MIN, CHEAT_FORCE_MAX] while sweeping.
+                # if bow_displacement >= BOW_AMPLITUDE * 0.9:
+                #     bow_dir = -1.0
+                # elif bow_displacement <= -BOW_AMPLITUDE * 0.9:
+                #     bow_dir = 1.0
+
+                # if force_normal_mag > CHEAT_FORCE_MAX:
+                #     bow_normal_offset -= CHEAT_POS_STEP
+                # elif force_normal_mag < CHEAT_FORCE_MIN:
+                #     bow_normal_offset += CHEAT_POS_STEP
+
+                # bowing_goal_pos = (str_pos
+                #                    + bow_dir * BOW_AMPLITUDE * str_bow_dir
+                #                    + bow_normal_offset * str_normal)
+                # set_goal(r, bowing_goal_pos, str_ori)
+
+                if loop_time - last_print > 0.5:
+                    print(f"  BOWING str={TARGET_STRING}  F_n={force_normal:+.3f} N "
+                          f"|F|={force_normal_mag:.3f} N offset={bow_normal_offset:+.4f} m")
+                    last_print = loop_time
 
                 if not key_queue.empty():
                     key = key_queue.get().strip()
@@ -390,16 +486,15 @@ def main():
                         homing_safety(r, home_pos, home_ori)
                         state = state.HOMING
 
-                if not key_queue.empty():
-                    key = key_queue.get().strip()
                     new_string = {'5': 0, '6': 1, '7': 2, '8': 3}.get(key)
                     if new_string is not None and new_string != TARGET_STRING:
                         TARGET_STRING = new_string
-                        set_position_control(r)
-                        time.sleep(0.1)
                         lift_goal_pos = cur_pos - LIFT_HEIGHT * str_normal
                         set_linear_vel_limit(r, MOVING_SPEED)
-                        set_goal(r, lift_goal_pos, str_ori)
+                        set_goal(r, lift_goal_pos, cur_ori)
+                        set_position_control(r)
+                        time.sleep(0.1)
+                        set_goal(r, lift_goal_pos, cur_ori)
                         print(f"\nSwitching to string {TARGET_STRING} → LIFTING")
                         state = State.LIFTING
 
@@ -409,6 +504,12 @@ def main():
                 if loop_time - last_print > 0.5:
                     print(f"  LIFTING  pos_err={p_err:.4f}")
                     last_print = loop_time
+
+                if not key_queue.empty():
+                    key = key_queue.get().strip()
+                    if key in ('0'):
+                        homing_safety(r, home_pos, home_ori)
+                        state = state.HOMING
 
                 if p_err < 0.02:
                     str_ori     = cal_orientations[TARGET_STRING]
