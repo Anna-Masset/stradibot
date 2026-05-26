@@ -22,6 +22,18 @@ from enum import Enum, auto
 from dataclasses import dataclass
 
 # ============================================================
+# MIDI CONFIG  (set MIDI_MODE to enable)
+# ============================================================
+
+MIDI_MODE        = False          # True = MIDI drives string switches
+MIDI_FILE        = "test_scale.mid"           # e.g. "piece.mid" — None = live keyboard
+MIDI_SPEED       = 1.0            # >1.0 slows down file playback
+# MIDI_PORT      = None           # None = first available port (live mode)
+
+if MIDI_MODE:
+    from midi_input import parse_midi_file, MidiKeyboard, MidiEvent
+
+# ============================================================
 # CONFIG
 # ============================================================
 
@@ -148,6 +160,7 @@ class State(Enum):
     CONTACTING  = auto()
     CHEATING    = auto()
     BOWING      = auto()
+    HOVERING    = auto()   # lifted off string, waiting for next note
     LIFTING     = auto()
     MOVING      = auto()
 
@@ -208,6 +221,23 @@ def _key_input_thread():
     while True:
         key_queue.put(input())
 
+def get_midi_event(midi_kb, midi_events, midi_event_idx, midi_start_time, loop_time):
+    """
+    Returns (MidiEvent, new_idx) if an event is ready, else (None, midi_event_idx).
+    - Live mode (midi_kb set): polls the keyboard queue.
+    - File mode (midi_events set): checks if next event's start_time has been reached.
+    midi_start_time is the loop_time when the piece started.
+    """
+    if midi_kb is not None:
+        return midi_kb.get_event(), midi_event_idx
+    if midi_events and midi_start_time is not None:
+        elapsed = loop_time - midi_start_time
+        if midi_event_idx < len(midi_events):
+            ev = midi_events[midi_event_idx]
+            if elapsed >= ev.start_time:
+                return ev, midi_event_idx + 1
+    return None, midi_event_idx
+
 # ============================================================
 # MAIN
 # ============================================================
@@ -249,6 +279,7 @@ def main():
     str_ori     = cal_orientations[TARGET_STRING]
     str_pos     = cal_positions[TARGET_STRING]
     str_normal  = str_ori[:, 2]
+    str_moment  = str_ori[:, 1]
     str_bow_dir = str_ori[:, 0]
 
     # ── State machine variables ──────────────────────────────
@@ -259,6 +290,21 @@ def main():
 
     # Start single keyboard thread
     threading.Thread(target=_key_input_thread, daemon=True).start()
+
+    # MIDI setup
+    midi_events  = []    # file mode: pre-parsed event list
+    midi_kb      = None  # live mode: MidiKeyboard instance
+    midi_event_idx = 0   # file mode: index into midi_events
+    midi_start_time = None  # file mode: wall time when piece started
+
+    if MIDI_MODE:
+        if MIDI_FILE:
+            midi_events = parse_midi_file(MIDI_FILE, speed_multiplier=MIDI_SPEED)
+            print(f"MIDI file mode: {len(midi_events)//2} notes loaded from {MIDI_FILE}")
+        else:
+            midi_kb = MidiKeyboard()
+            midi_kb.start()
+            print(f"MIDI keyboard mode: live input active")
 
     print(f"\nState: CALIBRATING  (floating — press 1/2/3/4 to register strings, Enter to home)")
     print(f"Target string: {TARGET_STRING}")
@@ -480,12 +526,15 @@ def main():
                           f"|F|={force_normal_mag:.3f} N offset={bow_normal_offset:+.4f} m")
                     last_print = loop_time
 
+                # ── keyboard input ──
                 if not key_queue.empty():
                     key = key_queue.get().strip()
-                    if key in ('0'):
+                    if key == '0':
                         homing_safety(r, home_pos, home_ori)
-                        state = state.HOMING
-
+                        state = State.HOMING
+                    if key == 'p' and MIDI_MODE and midi_start_time is None:
+                        midi_start_time = loop_time
+                        print(f"MIDI playback started")
                     new_string = {'5': 0, '6': 1, '7': 2, '8': 3}.get(key)
                     if new_string is not None and new_string != TARGET_STRING:
                         TARGET_STRING = new_string
@@ -497,6 +546,30 @@ def main():
                         set_goal(r, lift_goal_pos, cur_ori)
                         print(f"\nSwitching to string {TARGET_STRING} → LIFTING")
                         state = State.LIFTING
+
+                # ── MIDI input ──
+                if MIDI_MODE:
+                    ev, midi_event_idx = get_midi_event(midi_kb, midi_events, midi_event_idx, midi_start_time, loop_time)
+                    if ev is not None:
+                        if ev.note_off:
+                            # lift off — go to HOVERING
+                            lift_goal_pos = cur_pos - LIFT_HEIGHT * str_normal
+                            set_linear_vel_limit(r, MOVING_SPEED)
+                            set_goal(r, lift_goal_pos, cur_ori)
+                            set_position_control(r)
+                            print(f"\nNote off → HOVERING")
+                            state = State.HOVERING
+                        elif ev.string_idx != TARGET_STRING:
+                            # string switch
+                            TARGET_STRING = ev.string_idx
+                            lift_goal_pos = cur_pos - LIFT_HEIGHT * str_normal
+                            set_linear_vel_limit(r, MOVING_SPEED)
+                            set_goal(r, lift_goal_pos, cur_ori)
+                            set_position_control(r)
+                            time.sleep(0.1)
+                            set_goal(r, lift_goal_pos, cur_ori)
+                            print(f"\nMIDI string switch → string {TARGET_STRING}, fret {ev.fret} → LIFTING")
+                            state = State.LIFTING
 
             # ── LIFTING ─────────────────────────────────────────────
             elif state == State.LIFTING:
@@ -515,11 +588,41 @@ def main():
                     str_ori     = cal_orientations[TARGET_STRING]
                     str_pos     = cal_positions[TARGET_STRING]
                     str_normal  = str_ori[:, 2]
+                    str_moment  = str_ori[:, 1]
                     str_bow_dir = str_ori[:, 0]
                     move_goal_pos = str_pos - 0.05 * str_normal
                     set_goal(r, move_goal_pos, str_ori)
                     print(f"\nState: MOVING  (toward string {TARGET_STRING})")
                     state = State.MOVING
+
+            # ── HOVERING ────────────────────────────────────────────
+            # Lifted off string, holding position, waiting for next note-on.
+            # Only reachable in MIDI_MODE.
+            elif state == State.HOVERING:
+                if loop_time - last_print > 1.0:
+                    print(f"  HOVERING  (waiting for next note)")
+                    last_print = loop_time
+
+                if MIDI_MODE:
+                    ev, midi_event_idx = get_midi_event(midi_kb, midi_events, midi_event_idx, midi_start_time, loop_time)
+                    if ev is not None and not ev.note_off:
+                        if ev.string_idx != TARGET_STRING:
+                            TARGET_STRING = ev.string_idx
+                            str_ori     = cal_orientations[TARGET_STRING]
+                            str_pos     = cal_positions[TARGET_STRING]
+                            str_normal  = str_ori[:, 2]
+                            str_moment  = str_ori[:, 1]
+                            str_bow_dir = str_ori[:, 0]
+                            move_goal_pos = str_pos - 0.05 * str_normal
+                            set_goal(r, move_goal_pos, str_ori)
+                            print(f"\nNote on string {TARGET_STRING}, fret {ev.fret} → MOVING")
+                            state = State.MOVING
+                        else:
+                            # same string — go straight to PLACING
+                            contact_goal_pos = str_pos - 0.05 * str_normal
+                            set_goal(r, contact_goal_pos, str_ori)
+                            print(f"\nNote on same string {TARGET_STRING} → PLACING")
+                            state = State.PLACING
 
             # ── MOVING ──────────────────────────────────────────────
             elif state == State.MOVING:
