@@ -10,7 +10,7 @@ import mido
 
 # One note per string, open string notes
 notes = [55, 62, 69, 76, 69, 62, 55]  # G D A E A D G
-note_duration = 1.0   # seconds per note
+note_duration = 5.0   # seconds per note
 gap = 2.0             # silence between notes
 
 tempo = 500000        # 120 BPM

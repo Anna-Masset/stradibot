@@ -25,9 +25,9 @@ from dataclasses import dataclass
 # MIDI CONFIG  (set MIDI_MODE to enable)
 # ============================================================
 
-MIDI_MODE        = False          # True = MIDI drives string switches
-MIDI_FILE        = "test_scale.mid"           # e.g. "piece.mid" — None = live keyboard
-MIDI_SPEED       = 1.0            # >1.0 slows down file playback
+MIDI_MODE        = True          # True = MIDI drives string switches
+MIDI_FILE        = "twinkle-twinkle-little-star.mid"           # e.g. "piece.mid" — None = live keyboard
+MIDI_SPEED       = 20.0            # >1.0 slows down file playback
 # MIDI_PORT      = None           # None = first available port (live mode)
 
 if MIDI_MODE:
@@ -42,7 +42,7 @@ LOOP_DT        = 0.01   # 100 Hz
 
 TARGET_STRING  = 1       # which string to bow (0=G, 1=D, 2=A, 3=E)
 
-MOVING_SPEED            = 0.05    # m/s — how fast to move when not contacting
+MOVING_SPEED            = 0.08    # m/s — how fast to move when not contacting
 CONTACT_APPROACH_SPEED  = 0.03   # m/s — how fast to creep toward the string
 ANGULAR_SPEED           = np.pi/8    # rad/s — for orientation corrections during bowing
 SAFETY_SPEED            = 0.04
@@ -55,7 +55,10 @@ DESIRED_BOW_FORCE       = 1.3
 DESIRED_BOW_MOMENT       = 0.2
 # DESIRED_BOW_MOMENT       = 0.14
 BOW_OFFSET              = 0.35   # m   — offset along bow direction from string position
-LIFT_HEIGHT             = 0.03   # m   — how far to lift along string normal when switching
+
+LIFT_HEIGHT             = 0.01   # m   — how far to lift along string normal when switching
+MOVING_ANGULAR_SPEED    = np.pi/3
+
 MOVE_THRESHOLD          = 0.15   # m   — lateral distance along bow dir to stop above new string
 
 CHEAT_FORCE_MIN               = 0.8
@@ -63,8 +66,12 @@ CHEAT_FORCE_MAX               = 1.2
 CHEAT_SETTLE_TIME              = 0.1
 CHEAT_POS_STEP                = 0.0003  # m per loop — bow goal nudge along str_normal (~5 cm/s @ 100 Hz)
 
+STRING_MOMENT_PLUS          = [0.22, 0.32, 0.40, 0.35] # String 1,2,3,4
+STRING_MOMENT_MINUS         = [0.17, 0.25, 0.25, 0.25]
+
 IS_REAL = True
 CALIBRATION = True
+GOING_TO_ZERO = False
 
 if IS_REAL:
     # CONFIG_FILE = "stradibot.xml"
@@ -89,9 +96,14 @@ class RedisKeys:
     current_position:    str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::current_position"
     current_orientation: str = f"opensai::controllers::{robot_name}::cartesian_controller::cartesian_task::current_orientation"
     active_controller:   str = f"opensai::controllers::{robot_name}::active_controller_name"
+    posture_task:        str = f"opensai::controllers::{robot_name}::cartesian_controller::joint_task::goal_position"
     config_file:         str = f"::sai-interfaces-webui::config_file_name"
     # force sensor (local frame, 3D vector)
     joint_task_kp:       str = f"opensai::controllers::{robot_name}::joint_controller::joint_task::kp"
+    joint_controller_task_goal: str = f"opensai::controllers::{robot_name}::joint_controller::joint_task::goal_position"
+    cartesian_controller_task_goal: str = f"opensai::controllers::{robot_name}::cartesian_controller::joint_task::goal_position"
+    joint_pos:             str = f"opensai::controllers::{robot_name}::joint_controller::joint_task::current_position"
+
     if IS_REAL:
         # ft_force:            str = "opensai::sensors::Titania::ft_sensor::tcp_force"
         ft_force:            str = "opensai::sensors::Titania::ft_sensor::flange::force"
@@ -149,11 +161,17 @@ else:
     STRING_POSITIONS = [0.0, 0.0, 0.0, 0.0]
     STRING_ORIENTATIONS = [np.eye(3), np.eye(3), np.eye(3), np.eye(3)]
 
+# INITIALIZATION CONSTANTS
+INIT_JOINT_POS = [1.178460,-1.101560,-1.861230,1.604370,1.033080,-0.245748,0.983508]
+ZERO_JOINT_POS = [0.0] * 7
+
 # ============================================================
 # STATES
 # ============================================================
 
 class State(Enum):
+    ZEROING     = auto()
+    INITIALIZING = auto()
     CALIBRATING = auto()
     HOMING      = auto()
     PLACING     = auto()
@@ -211,6 +229,7 @@ def homing_safety(r, home_pos, home_ori):
     set_position_control(r)
     time.sleep(0.1)  # wait for controller to switch and update readings
     set_linear_vel_limit(r, SAFETY_SPEED)
+    r.set(KEYS.angular_vel_sat_limit, str(ANGULAR_SPEED))
     set_goal(r, home_pos, home_ori)
     print(f"\nState: HOMING SAFETY")
 
@@ -279,11 +298,16 @@ def main():
     str_ori     = cal_orientations[TARGET_STRING]
     str_pos     = cal_positions[TARGET_STRING]
     str_normal  = str_ori[:, 2]
-    str_moment  = str_ori[:, 1]
+    str_moment_axis  = str_ori[:, 1]
     str_bow_dir = str_ori[:, 0]
 
     # ── State machine variables ──────────────────────────────
-    state            = State.CALIBRATING if CALIBRATION else State.HOMING
+    if GOING_TO_ZERO and CALIBRATION:
+        state = State.ZEROING
+    elif not GOING_TO_ZERO and CALIBRATION:
+        state = State.CALIBRATING
+
+    # state            = State.ZEROING if CALIBRATION and GOING_TO_ZERO else State.HOMING
     contact_goal_pos = home_pos.copy()
     bow_displacement = 0.0
     bow_dir          = 1.0
@@ -306,7 +330,7 @@ def main():
             midi_kb.start()
             print(f"MIDI keyboard mode: live input active")
 
-    print(f"\nState: CALIBRATING  (floating — press 1/2/3/4 to register strings, Enter to home)")
+    
     print(f"Target string: {TARGET_STRING}")
 
     loop_time  = 0.0
@@ -318,11 +342,19 @@ def main():
     set_linear_vel_limit(r, MOVING_SPEED)
     r.set(KEYS.angular_vel_sat_limit, str(ANGULAR_SPEED))
 
-    if CALIBRATION:
+    if CALIBRATION and not GOING_TO_ZERO:
         set_floating(r)
     else:
         set_position_control(r)
-    # set_goal(r, np.array([ 0.940193, -0.078024,  0.310439]), home_ori)
+    set_goal(r, np.array([ 0.940193, -0.078024,  0.310439]), home_ori)
+
+    # Initialization joint controller setup
+    if GOING_TO_ZERO:
+        print(f"\nState: ZEROING")
+        r.set(KEYS.active_controller, "joint_controller")
+        # r.set(KEYS.joint_task_kp, json.dumps([100.0] * 7))
+        time.sleep(0.1)
+        r.set(KEYS.joint_controller_task_goal, json.dumps(ZERO_JOINT_POS))
 
     try:
         while True:
@@ -333,6 +365,38 @@ def main():
             cur_ori = get_ori(r)
 
             # during first state, get initial force sensor readings to find bias and remove later on (TODO)
+
+            # ── INITIALIZING ──────────────────────────────────────────────
+            if state == State.ZEROING:
+                joint_curr_pos = np.array(json.loads(r.get(KEYS.joint_pos)))
+                error = np.linalg.norm(np.array(joint_curr_pos) - np.array(ZERO_JOINT_POS))
+
+                if loop_time - last_print > 1.0:
+                    print(f"  ZEROING  pos_err={error:.4f}")
+                    last_print = loop_time
+    
+                if error <= 1.0:
+                    print(f"\nState: INITIALIZING (PRESS ENTER TO CALIBRATE)   ")
+                    r.set(KEYS.joint_controller_task_goal, json.dumps(INIT_JOINT_POS))
+                    state = state.INITIALIZING
+            
+            if state == State.INITIALIZING: 
+
+                if not key_queue.empty():
+                    key = key_queue.get().strip()
+                    if key == '':
+                        # save homing position
+                        r.set(KEYS.active_controller, "cartesian_controller")
+                        time.sleep(0.1)
+                        home_pos = get_pos(r)
+                        home_ori = get_ori(r)
+                        print(f"Home position: {home_pos}")
+
+                        # go back to floating for calibration
+                        set_floating(r)
+                        time.sleep(0.1)
+                        print(f"\nState: CALIBRATING  (floating — press 1/2/3/4 to register strings, Enter to home)")
+                        state = State.CALIBRATING
 
             # ── CALIBRATING ──────────────────────────────────────────────
             if state == State.CALIBRATING:
@@ -356,7 +420,7 @@ def main():
                         str_ori     = cal_orientations[TARGET_STRING]
                         str_pos     = cal_positions[TARGET_STRING]
                         str_normal  = str_ori[:, 2]
-                        str_moment  = str_ori[:, 1]
+                        str_moment_axis  = str_ori[:, 1]
                         str_bow_dir = str_ori[:, 0]
                         r.set(KEYS.active_controller, "cartesian_controller")                    
                         time.sleep(0.1)  # wait for controller to switch and update readings
@@ -364,6 +428,9 @@ def main():
                         # r.set(KEYS.moment_space_axis, json.dumps(np.array([1, 0, 0]).tolist()))
                         # r.set(KEYS.desired_moment,    json.dumps((DESIRED_BOW_MOMENT * np.array([1, 0, 0])).tolist()))
                         # time.sleep(0.1)
+
+                        r.set(KEYS.posture_task, json.dumps(INIT_JOINT_POS))
+
                         set_goal(r, home_pos, home_ori)
                         print(f"\nState: HOMING")
                         state = State.HOMING
@@ -379,7 +446,7 @@ def main():
                     last_print = loop_time
 
                 if not key_queue.empty() and key_queue.get().strip() == '':
-                    contact_goal_pos = str_pos - 0.05 * str_normal
+                    contact_goal_pos = str_pos - LIFT_HEIGHT * str_normal
                     print(f"\nState: PLACING  (approaching string {TARGET_STRING})")
                     set_goal(r, contact_goal_pos, str_ori)
                     state = State.PLACING
@@ -417,64 +484,14 @@ def main():
 
                 if force_normal_mag > CONTACT_FORCE_THRESHOLD:
                     print(f"\nState: CHEATING  (contact detected |F|={force_normal_mag:.3f} N)")
-                    bow_dir = 1.0 ## starting to the left 
-                    DESIRED_BOW_MOMENT = 0.1
-
-                    # Pure position control — we'll nudge cheat_goal_pos along str_normal based on force feedback
-                    # set_position_control(r)
-                    # cheat_settle_start = None
-                    # cheat_goal_pos = cur_pos.copy()
-                    # set_goal(r, cheat_goal_pos, str_ori)
-                    # state = State.CHEATING
-
-                    # r.set(KEYS.force_space_dim,  "1")
-                    # r.set(KEYS.force_space_axis, json.dumps(str_normal.tolist()))
-                    # r.set(KEYS.desired_force,    json.dumps((DESIRED_BOW_FORCE * str_normal).tolist()))
-                    # r.set(KEYS.closed_loop,      "1")
+                    bow_dir = 1.0 ## starting to the minus
+                    DESIRED_BOW_MOMENT = STRING_MOMENT_MINUS[TARGET_STRING]
 
                     r.set(KEYS.moment_space_dim, "1")
-                    r.set(KEYS.moment_space_axis, json.dumps(str_moment.tolist()))
-                    r.set(KEYS.desired_moment,    json.dumps((DESIRED_BOW_MOMENT * str_moment).tolist()))
+                    r.set(KEYS.moment_space_axis, json.dumps(str_moment_axis.tolist()))
+                    r.set(KEYS.desired_moment,    json.dumps((DESIRED_BOW_MOMENT * str_moment_axis).tolist()))
                     set_linear_vel_limit(r, BOW_SPEED)
                     state = State.BOWING
-
-
-            # ── CHEATING ───────────────────────────────────────────
-            # Pure position control. Reads force sensor; if magnitude is outside
-            # [CHEAT_FORCE_MIN, CHEAT_FORCE_MAX] band, nudge cheat_goal_pos along
-            # str_normal by a fixed step. +str_normal points INTO the string, so
-            # reaction force_normal is negative when pressing: too-pressed → back
-            # off (-str_normal); too-light → push in (+str_normal).
-            # elif state == State.CHEATING:
-            #     force_local = get_force(r)
-            #     force_world = cur_ori @ force_local
-            #     force_normal = np.dot(force_world, str_normal)  # signed
-            #     force_normal_mag = abs(force_normal)
-
-            #     if force_normal_mag > CHEAT_FORCE_MAX:
-            #         cheat_goal_pos -= CHEAT_POS_STEP * str_normal
-            #         set_goal(r, cheat_goal_pos, str_ori)
-            #         cheat_settle_start = None
-            #     elif force_normal_mag < CHEAT_FORCE_MIN:
-            #         cheat_goal_pos += CHEAT_POS_STEP * str_normal
-            #         set_goal(r, cheat_goal_pos, str_ori)
-            #         cheat_settle_start = None
-            #     else:
-            #         if cheat_settle_start is None:
-            #             cheat_settle_start = loop_time
-            #         elif loop_time - cheat_settle_start >= CHEAT_SETTLE_TIME:
-            #             print(f"  Switching to BOWING str={TARGET_STRING}  Force stabilized at |F|={force_normal_mag:.3f} N")
-            #             str_pos = cur_pos.copy()  # anchor bow sweep around the settled contact point
-            #             set_goal(r, cur_pos.copy(), str_ori)
-            #             set_linear_vel_limit(r, BOW_SPEED)
-            #             bow_dir = 1.0
-            #             bow_normal_offset = 0.0  # impedance drift along str_normal during BOWING
-            #             state = State.BOWING
-
-            #     if loop_time - last_print > 0.5:
-            #         settled = (loop_time - cheat_settle_start) if cheat_settle_start else 0.0
-            #         print(f"  CHEATING F_n={force_normal:+.3f} N |F|={force_normal_mag:.3f} N settled={settled:.2f}s")
-            #         last_print = loop_time
 
 
             # ── BOWING ─────────────────────────────────────────────
@@ -492,34 +509,16 @@ def main():
                     last_print = loop_time
                 
                 if bow_displacement >= BOW_AMPLITUDE * 0.9:
-                    bow_dir = -1.0
-                    DESIRED_BOW_MOMENT = 0.4
+                    bow_dir = -1.0 # Going to the plus
+                    DESIRED_BOW_MOMENT = STRING_MOMENT_PLUS[TARGET_STRING]
                 elif bow_displacement <= -BOW_AMPLITUDE * 0.9:
-                    bow_dir = 1.0
-                    DESIRED_BOW_MOMENT = 0.1
+                    bow_dir = 1.0 # Going to the minus
+                    DESIRED_BOW_MOMENT = STRING_MOMENT_MINUS[TARGET_STRING]
 
-                r.set(KEYS.desired_moment,    json.dumps((DESIRED_BOW_MOMENT * str_moment).tolist()))
+                r.set(KEYS.desired_moment,    json.dumps((DESIRED_BOW_MOMENT * str_moment_axis).tolist()))
                 
                 bowing_goal_pos = str_pos + bow_dir * BOW_AMPLITUDE * str_bow_dir
                 set_goal(r, bowing_goal_pos, str_ori)
-
-                # ── IMPEDANCE-STYLE BOWING: sweep along str_bow_dir, nudge along str_normal ──
-                # Same band logic as CHEATING: drift the goal toward/away from string
-                # to keep |F| in [CHEAT_FORCE_MIN, CHEAT_FORCE_MAX] while sweeping.
-                # if bow_displacement >= BOW_AMPLITUDE * 0.9:
-                #     bow_dir = -1.0
-                # elif bow_displacement <= -BOW_AMPLITUDE * 0.9:
-                #     bow_dir = 1.0
-
-                # if force_normal_mag > CHEAT_FORCE_MAX:
-                #     bow_normal_offset -= CHEAT_POS_STEP
-                # elif force_normal_mag < CHEAT_FORCE_MIN:
-                #     bow_normal_offset += CHEAT_POS_STEP
-
-                # bowing_goal_pos = (str_pos
-                #                    + bow_dir * BOW_AMPLITUDE * str_bow_dir
-                #                    + bow_normal_offset * str_normal)
-                # set_goal(r, bowing_goal_pos, str_ori)
 
                 if loop_time - last_print > 0.5:
                     print(f"  BOWING str={TARGET_STRING}  F_n={force_normal:+.3f} N "
@@ -533,6 +532,8 @@ def main():
                         homing_safety(r, home_pos, home_ori)
                         state = State.HOMING
                     if key == 'p' and MIDI_MODE and midi_start_time is None:
+                        r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
+                        set_linear_vel_limit(r, MOVING_SPEED)
                         midi_start_time = loop_time
                         print(f"MIDI playback started")
                     new_string = {'5': 0, '6': 1, '7': 2, '8': 3}.get(key)
@@ -540,6 +541,7 @@ def main():
                         TARGET_STRING = new_string
                         lift_goal_pos = cur_pos - LIFT_HEIGHT * str_normal
                         set_linear_vel_limit(r, MOVING_SPEED)
+                        r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
                         set_goal(r, lift_goal_pos, cur_ori)
                         set_position_control(r)
                         time.sleep(0.1)
@@ -554,7 +556,6 @@ def main():
                         if ev.note_off:
                             # lift off — go to HOVERING
                             lift_goal_pos = cur_pos - LIFT_HEIGHT * str_normal
-                            set_linear_vel_limit(r, MOVING_SPEED)
                             set_goal(r, lift_goal_pos, cur_ori)
                             set_position_control(r)
                             print(f"\nNote off → HOVERING")
@@ -563,7 +564,6 @@ def main():
                             # string switch
                             TARGET_STRING = ev.string_idx
                             lift_goal_pos = cur_pos - LIFT_HEIGHT * str_normal
-                            set_linear_vel_limit(r, MOVING_SPEED)
                             set_goal(r, lift_goal_pos, cur_ori)
                             set_position_control(r)
                             time.sleep(0.1)
@@ -588,9 +588,9 @@ def main():
                     str_ori     = cal_orientations[TARGET_STRING]
                     str_pos     = cal_positions[TARGET_STRING]
                     str_normal  = str_ori[:, 2]
-                    str_moment  = str_ori[:, 1]
+                    str_moment_axis  = str_ori[:, 1]
                     str_bow_dir = str_ori[:, 0]
-                    move_goal_pos = str_pos - 0.05 * str_normal
+                    move_goal_pos = str_pos - LIFT_HEIGHT * str_normal
                     set_goal(r, move_goal_pos, str_ori)
                     print(f"\nState: MOVING  (toward string {TARGET_STRING})")
                     state = State.MOVING
@@ -603,6 +603,12 @@ def main():
                     print(f"  HOVERING  (waiting for next note)")
                     last_print = loop_time
 
+                if not key_queue.empty():
+                    key = key_queue.get().strip()
+                    if key == '0':
+                        homing_safety(r, home_pos, home_ori)
+                        state = State.HOMING
+
                 if MIDI_MODE:
                     ev, midi_event_idx = get_midi_event(midi_kb, midi_events, midi_event_idx, midi_start_time, loop_time)
                     if ev is not None and not ev.note_off:
@@ -611,15 +617,15 @@ def main():
                             str_ori     = cal_orientations[TARGET_STRING]
                             str_pos     = cal_positions[TARGET_STRING]
                             str_normal  = str_ori[:, 2]
-                            str_moment  = str_ori[:, 1]
+                            str_moment_axis  = str_ori[:, 1]
                             str_bow_dir = str_ori[:, 0]
-                            move_goal_pos = str_pos - 0.05 * str_normal
+                            move_goal_pos = str_pos - LIFT_HEIGHT * str_normal
                             set_goal(r, move_goal_pos, str_ori)
                             print(f"\nNote on string {TARGET_STRING}, fret {ev.fret} → MOVING")
                             state = State.MOVING
                         else:
                             # same string — go straight to PLACING
-                            contact_goal_pos = str_pos - 0.05 * str_normal
+                            contact_goal_pos = str_pos - LIFT_HEIGHT * str_normal
                             set_goal(r, contact_goal_pos, str_ori)
                             print(f"\nNote on same string {TARGET_STRING} → PLACING")
                             state = State.PLACING
@@ -632,7 +638,7 @@ def main():
                     last_print = loop_time
 
                 if lateral_dist <= MOVE_THRESHOLD:
-                    contact_goal_pos = str_pos - 0.05 * str_normal
+                    contact_goal_pos = str_pos - LIFT_HEIGHT * str_normal
                     set_goal(r, contact_goal_pos, str_ori)
                     print(f"\nState: PLACING  (descending to string {TARGET_STRING})")
                     state = State.PLACING
