@@ -123,9 +123,9 @@ def main():
         events = parse_single_track(filename, track_idx, speed)
         print(f"\nTrack {track_idx} only  (speed={speed}x)\n")
     else:
-        from midi_input import parse_midi_file
+        from midi_input import parse_midi_file, ALL_FRET_OFFSETS
         raw = parse_midi_file(filename, speed_multiplier=speed)
-        events = [(OPEN_NOTES[e.string_idx] + e.fret, e.string_idx, e.fret, e.start_time, e.duration)
+        events = [(OPEN_NOTES[e.string_idx] + ALL_FRET_OFFSETS[e.fret], e.string_idx, e.fret, e.start_time, e.duration)
                   for e in raw if not e.note_off]
         print(f"\nAll tracks merged  (speed={speed}x)\n")
 
