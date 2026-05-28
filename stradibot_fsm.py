@@ -343,6 +343,7 @@ def main():
 
     # Solenoid setup
     sol = None
+    current_fret = 0  # track active fret to avoid redundant serial commands
     if SOLENOID_PORT is not None:
         sol = Solenoid(SOLENOID_PORT)
 
@@ -547,6 +548,7 @@ def main():
                     key = key_queue.get().strip()
                     if key == '0':
                         homing_safety(r, home_pos, home_ori, sol)
+                        current_fret = 0
                         state = State.HOMING
                     if key == 'p' and MIDI_MODE and midi_start_time is None:
                         r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
@@ -572,15 +574,22 @@ def main():
                     if ev is not None:
                         if ev.note_off:
                             # lift off — go to HOVERING
-                            if sol: sol.release()
+                            if sol and current_fret != 0:
+                                sol.release()
+                                current_fret = 0
                             lift_goal_pos = cur_pos - LIFT_HEIGHT * str_normal
                             set_goal(r, lift_goal_pos, cur_ori)
                             set_position_control(r)
                             print(f"\nNote off → HOVERING")
                             state = State.HOVERING
                         elif ev.string_idx != TARGET_STRING:
-                            # string switch
-                            if sol: sol.set_fret(ev.fret) if ev.fret > 0 else sol.release()
+                            # string switch — update fret only if changed
+                            if sol and ev.fret != current_fret:
+                                if ev.fret > 0:
+                                    sol.set_fret(ev.fret)
+                                else:
+                                    sol.release()
+                                current_fret = ev.fret
                             TARGET_STRING = ev.string_idx
                             lift_goal_pos = cur_pos - LIFT_HEIGHT * str_normal
                             set_goal(r, lift_goal_pos, cur_ori)
@@ -590,8 +599,13 @@ def main():
                             print(f"\nMIDI string switch → string {TARGET_STRING}, fret {ev.fret} → LIFTING")
                             state = State.LIFTING
                         else:
-                            # same string — reverse bow direction for new stroke
-                            if sol: sol.set_fret(ev.fret) if ev.fret > 0 else sol.release()
+                            # same string — update fret only if changed, reverse bow
+                            if sol and ev.fret != current_fret:
+                                if ev.fret > 0:
+                                    sol.set_fret(ev.fret)
+                                else:
+                                    sol.release()
+                                current_fret = ev.fret
                             bow_dir *= -1.0
                             print(f"\nMIDI same string {TARGET_STRING}, fret {ev.fret} → reversing bow direction")
 
@@ -606,7 +620,8 @@ def main():
                     key = key_queue.get().strip()
                     if key in ('0'):
                         homing_safety(r, home_pos, home_ori, sol)
-                        state = state.HOMING
+                        current_fret = 0
+                        state = State.HOMING
 
                 if p_err < 0.02:
                     str_ori     = cal_orientations[TARGET_STRING]
@@ -631,12 +646,18 @@ def main():
                     key = key_queue.get().strip()
                     if key == '0':
                         homing_safety(r, home_pos, home_ori, sol)
+                        current_fret = 0
                         state = State.HOMING
 
                 if MIDI_MODE:
                     ev, midi_event_idx = get_midi_event(midi_kb, midi_events, midi_event_idx, midi_elapsed, midi_start_time is not None)
                     if ev is not None and not ev.note_off:
-                        if sol: sol.set_fret(ev.fret) if ev.fret > 0 else sol.release()
+                        if sol and ev.fret != current_fret:
+                            if ev.fret > 0:
+                                sol.set_fret(ev.fret)
+                            else:
+                                sol.release()
+                            current_fret = ev.fret
                         if ev.string_idx != TARGET_STRING:
                             TARGET_STRING = ev.string_idx
                             str_ori     = cal_orientations[TARGET_STRING]

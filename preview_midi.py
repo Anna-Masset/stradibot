@@ -132,6 +132,12 @@ def main():
     print(f"{'#':<4} {'Time(s)':<9} {'Note':<6} {'String':<8} {'Fret':<6} {'Dur(s)':<8}")
     print("-" * 45)
     for i, (midi_note, s, fret, start, dur) in enumerate(events):
+        # Show rest if there's a gap between this note and the previous one
+        if i > 0:
+            prev_end = events[i-1][3] + events[i-1][4]
+            gap = start - prev_end
+            if gap > 0.01:
+                print(f"{'':4} {prev_end:<9.2f} {'---':<6} {'REST':<8} {'':6} {gap:<8.2f}")
         print(f"{i+1:<4} {start:<9.2f} {midi_note_name(midi_note):<6} {STRING_NAMES[s]:<8} {fret:<6} {dur:<8.2f}")
 
     print(f"\nTotal notes: {len(events)}")
