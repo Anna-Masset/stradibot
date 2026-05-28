@@ -30,8 +30,12 @@ MIDI_FILE        = "twinkle-twinkle-little-star.mid"           # e.g. "piece.mid
 MIDI_SPEED       = 20.0            # >1.0 slows down file playback
 # MIDI_PORT      = None           # None = first available port (live mode)
 
+SOLENOID_PORT    = None           # e.g. "/dev/cu.usbmodemXXXX" — None = no solenoids
+
 if MIDI_MODE:
     from midi_input import parse_midi_file, MidiKeyboard, MidiEvent
+if SOLENOID_PORT is not None:
+    from solenoid import Solenoid
 
 # ============================================================
 # CONFIG
@@ -223,7 +227,8 @@ def apply_string_geometry(raw_pos, ori):
     pos = raw_pos + BOW_OFFSET * bow_dir
     return pos, normal, bow_dir
 
-def homing_safety(r, home_pos, home_ori):
+def homing_safety(r, home_pos, home_ori, sol=None):
+    if sol: sol.release()
     r.set(KEYS.active_controller, "cartesian_controller")
     r.set(KEYS.closed_loop,      "0")
     set_position_control(r)
@@ -336,7 +341,11 @@ def main():
             midi_kb.start()
             print(f"MIDI keyboard mode: live input active")
 
-    
+    # Solenoid setup
+    sol = None
+    if SOLENOID_PORT is not None:
+        sol = Solenoid(SOLENOID_PORT)
+
     print(f"Target string: {TARGET_STRING}")
 
     loop_time  = 0.0
@@ -537,7 +546,7 @@ def main():
                 if not key_queue.empty():
                     key = key_queue.get().strip()
                     if key == '0':
-                        homing_safety(r, home_pos, home_ori)
+                        homing_safety(r, home_pos, home_ori, sol)
                         state = State.HOMING
                     if key == 'p' and MIDI_MODE and midi_start_time is None:
                         r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
@@ -563,6 +572,7 @@ def main():
                     if ev is not None:
                         if ev.note_off:
                             # lift off — go to HOVERING
+                            if sol: sol.release()
                             lift_goal_pos = cur_pos - LIFT_HEIGHT * str_normal
                             set_goal(r, lift_goal_pos, cur_ori)
                             set_position_control(r)
@@ -570,6 +580,7 @@ def main():
                             state = State.HOVERING
                         elif ev.string_idx != TARGET_STRING:
                             # string switch
+                            if sol: sol.set_fret(ev.fret) if ev.fret > 0 else sol.release()
                             TARGET_STRING = ev.string_idx
                             lift_goal_pos = cur_pos - LIFT_HEIGHT * str_normal
                             set_goal(r, lift_goal_pos, cur_ori)
@@ -580,8 +591,9 @@ def main():
                             state = State.LIFTING
                         else:
                             # same string — reverse bow direction for new stroke
+                            if sol: sol.set_fret(ev.fret) if ev.fret > 0 else sol.release()
                             bow_dir *= -1.0
-                            print(f"\nMIDI same string {TARGET_STRING} → reversing bow direction")
+                            print(f"\nMIDI same string {TARGET_STRING}, fret {ev.fret} → reversing bow direction")
 
             # ── LIFTING ─────────────────────────────────────────────
             elif state == State.LIFTING:
@@ -593,7 +605,7 @@ def main():
                 if not key_queue.empty():
                     key = key_queue.get().strip()
                     if key in ('0'):
-                        homing_safety(r, home_pos, home_ori)
+                        homing_safety(r, home_pos, home_ori, sol)
                         state = state.HOMING
 
                 if p_err < 0.02:
@@ -618,12 +630,13 @@ def main():
                 if not key_queue.empty():
                     key = key_queue.get().strip()
                     if key == '0':
-                        homing_safety(r, home_pos, home_ori)
+                        homing_safety(r, home_pos, home_ori, sol)
                         state = State.HOMING
 
                 if MIDI_MODE:
                     ev, midi_event_idx = get_midi_event(midi_kb, midi_events, midi_event_idx, midi_elapsed, midi_start_time is not None)
                     if ev is not None and not ev.note_off:
+                        if sol: sol.set_fret(ev.fret) if ev.fret > 0 else sol.release()
                         if ev.string_idx != TARGET_STRING:
                             TARGET_STRING = ev.string_idx
                             str_ori     = cal_orientations[TARGET_STRING]
@@ -639,7 +652,7 @@ def main():
                             # same string — go straight to PLACING
                             contact_goal_pos = str_pos - LIFT_HEIGHT * str_normal
                             set_goal(r, contact_goal_pos, str_ori)
-                            print(f"\nNote on same string {TARGET_STRING} → PLACING")
+                            print(f"\nNote on same string {TARGET_STRING}, fret {ev.fret} → PLACING")
                             state = State.PLACING
 
             # ── MOVING ──────────────────────────────────────────────
@@ -656,6 +669,7 @@ def main():
                     state = State.PLACING
 
     except KeyboardInterrupt:
+        if sol: sol.close()
         print("\nStopped.")
 
 if __name__ == "__main__":
