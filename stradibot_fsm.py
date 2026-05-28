@@ -69,8 +69,8 @@ CHEAT_POS_STEP                = 0.0003  # m per loop — bow goal nudge along st
 STRING_MOMENT_PLUS          = [0.22, 0.32, 0.40, 0.35] # String 1,2,3,4
 STRING_MOMENT_MINUS         = [0.17, 0.25, 0.25, 0.25]
 
-IS_REAL = True
-CALIBRATION = True
+IS_REAL = False
+CALIBRATION = False
 GOING_TO_ZERO = False
 
 if IS_REAL:
@@ -240,20 +240,19 @@ def _key_input_thread():
     while True:
         key_queue.put(input())
 
-def get_midi_event(midi_kb, midi_events, midi_event_idx, midi_start_time, loop_time):
+def get_midi_event(midi_kb, midi_events, midi_event_idx, midi_elapsed, midi_started):
     """
     Returns (MidiEvent, new_idx) if an event is ready, else (None, midi_event_idx).
     - Live mode (midi_kb set): polls the keyboard queue.
-    - File mode (midi_events set): checks if next event's start_time has been reached.
-    midi_start_time is the loop_time when the piece started.
+    - File mode: checks if midi_elapsed has reached the next event's start_time.
+      midi_elapsed only advances when BOWING or HOVERING, so transitions are paused.
     """
     if midi_kb is not None:
         return midi_kb.get_event(), midi_event_idx
-    if midi_events and midi_start_time is not None:
-        elapsed = loop_time - midi_start_time
+    if midi_events and midi_started:
         if midi_event_idx < len(midi_events):
             ev = midi_events[midi_event_idx]
-            if elapsed >= ev.start_time:
+            if midi_elapsed >= ev.start_time:
                 return ev, midi_event_idx + 1
     return None, midi_event_idx
 
@@ -306,6 +305,12 @@ def main():
         state = State.ZEROING
     elif not GOING_TO_ZERO and CALIBRATION:
         state = State.CALIBRATING
+    # elif not GOING_TO_ZERO and not CALIBRATION and not IS_REAL:
+    #     r.set(KEYS.active_controller, "cartesian_controller")
+    #     time.sleep(0.1)
+    #     state = State.HOMING
+    #     home_pos = get_pos(r)
+    #     home_ori = get_ori(r)
 
     # state            = State.ZEROING if CALIBRATION and GOING_TO_ZERO else State.HOMING
     contact_goal_pos = home_pos.copy()
@@ -316,10 +321,11 @@ def main():
     threading.Thread(target=_key_input_thread, daemon=True).start()
 
     # MIDI setup
-    midi_events  = []    # file mode: pre-parsed event list
-    midi_kb      = None  # live mode: MidiKeyboard instance
-    midi_event_idx = 0   # file mode: index into midi_events
-    midi_start_time = None  # file mode: wall time when piece started
+    midi_events    = []    # file mode: pre-parsed event list
+    midi_kb        = None  # live mode: MidiKeyboard instance
+    midi_event_idx = 0     # file mode: index into midi_events
+    midi_start_time = None # set when 'p' is pressed — enables playback
+    midi_elapsed   = 0.0   # only advances when BOWING or HOVERING
 
     if MIDI_MODE:
         if MIDI_FILE:
@@ -364,7 +370,9 @@ def main():
             cur_pos = get_pos(r)
             cur_ori = get_ori(r)
 
-            # during first state, get initial force sensor readings to find bias and remove later on (TODO)
+            # Advance MIDI clock only when actively bowing or hovering
+            if MIDI_MODE and midi_start_time is not None and state in (State.BOWING, State.HOVERING):
+                midi_elapsed += LOOP_DT
 
             # ── INITIALIZING ──────────────────────────────────────────────
             if state == State.ZEROING:
@@ -551,7 +559,7 @@ def main():
 
                 # ── MIDI input ──
                 if MIDI_MODE:
-                    ev, midi_event_idx = get_midi_event(midi_kb, midi_events, midi_event_idx, midi_start_time, loop_time)
+                    ev, midi_event_idx = get_midi_event(midi_kb, midi_events, midi_event_idx, midi_elapsed, midi_start_time is not None)
                     if ev is not None:
                         if ev.note_off:
                             # lift off — go to HOVERING
@@ -570,6 +578,10 @@ def main():
                             set_goal(r, lift_goal_pos, cur_ori)
                             print(f"\nMIDI string switch → string {TARGET_STRING}, fret {ev.fret} → LIFTING")
                             state = State.LIFTING
+                        else:
+                            # same string — reverse bow direction for new stroke
+                            bow_dir *= -1.0
+                            print(f"\nMIDI same string {TARGET_STRING} → reversing bow direction")
 
             # ── LIFTING ─────────────────────────────────────────────
             elif state == State.LIFTING:
@@ -610,7 +622,7 @@ def main():
                         state = State.HOMING
 
                 if MIDI_MODE:
-                    ev, midi_event_idx = get_midi_event(midi_kb, midi_events, midi_event_idx, midi_start_time, loop_time)
+                    ev, midi_event_idx = get_midi_event(midi_kb, midi_events, midi_event_idx, midi_elapsed, midi_start_time is not None)
                     if ev is not None and not ev.note_off:
                         if ev.string_idx != TARGET_STRING:
                             TARGET_STRING = ev.string_idx
