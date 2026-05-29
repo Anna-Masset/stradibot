@@ -120,29 +120,42 @@ def main():
     track_idx   = int(sys.argv[3])   if len(sys.argv) > 3 else None
 
     if track_idx is not None:
-        events = parse_single_track(filename, track_idx, speed)
+        note_ons = parse_single_track(filename, track_idx, speed)
+        note_offs = []
         print(f"\nTrack {track_idx} only  (speed={speed}x)\n")
     else:
         from midi_input import parse_midi_file, ALL_FRET_OFFSETS
         raw = parse_midi_file(filename, speed_multiplier=speed)
-        events = [(OPEN_NOTES[e.string_idx] + ALL_FRET_OFFSETS[e.fret], e.string_idx, e.fret, e.start_time, e.duration)
-                  for e in raw if not e.note_off]
+        note_ons = [(OPEN_NOTES[e.string_idx] + ALL_FRET_OFFSETS[e.fret], e.string_idx, e.fret, e.start_time, e.duration)
+                    for e in raw if not e.note_off]
+        note_offs = [e.start_time for e in raw if e.note_off]
         print(f"\nAll tracks merged  (speed={speed}x)\n")
 
     print(f"{'#':<4} {'Time(s)':<9} {'Note':<6} {'String':<8} {'Fret':<6} {'Dur(s)':<8}")
     print("-" * 45)
-    for i, (midi_note, s, fret, start, dur) in enumerate(events):
+    off_idx = 0
+    for i, (midi_note, s, fret, start, dur) in enumerate(note_ons):
+        # Show any note_offs that happen before this note_on
+        while off_idx < len(note_offs) and note_offs[off_idx] <= start + 0.001:
+            if note_offs[off_idx] < start - 0.001:
+                print(f"{'':4} {note_offs[off_idx]:<9.2f} {'---':<6} {'OFF':<8} {'':6} {'':8}")
+            off_idx += 1
         # Show rest if there's a gap between this note and the previous one
         if i > 0:
-            prev_end = events[i-1][3] + events[i-1][4]
+            prev_end = note_ons[i-1][3] + note_ons[i-1][4]
             gap = start - prev_end
             if gap > 0.01:
                 print(f"{'':4} {prev_end:<9.2f} {'---':<6} {'REST':<8} {'':6} {gap:<8.2f}")
         print(f"{i+1:<4} {start:<9.2f} {midi_note_name(midi_note):<6} {STRING_NAMES[s]:<8} {fret:<6} {dur:<8.2f}")
+    # Show remaining note_offs after last note
+    while off_idx < len(note_offs):
+        print(f"{'':4} {note_offs[off_idx]:<9.2f} {'---':<6} {'OFF':<8} {'':6} {'':8}")
+        off_idx += 1
 
-    print(f"\nTotal notes: {len(events)}")
-    if events:
-        last = events[-1]
+    print(f"\nTotal notes: {len(note_ons)}")
+    print(f"Note offs:   {len(note_offs)}")
+    if note_ons:
+        last = note_ons[-1]
         print(f"Duration:    {last[3] + last[4]:.2f}s")
     print(f"Speed mult:  {speed}x")
 

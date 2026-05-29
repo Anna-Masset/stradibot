@@ -150,6 +150,11 @@ def parse_midi_file(filename: str, speed_multiplier: float = 1.0) -> list:
                     events.append(MidiEvent(s, fret, start + dur,  0.0,  note_off=True))
 
     events.sort(key=lambda e: e.start_time)
+
+    # Remove note_off events when a note_on starts at the same time (no actual rest)
+    note_on_times = set(e.start_time for e in events if not e.note_off)
+    events = [e for e in events if not (e.note_off and e.start_time in note_on_times)]
+
     print(f"Parsed {sum(1 for e in events if not e.note_off)} notes from {filename}")
     return events
 
