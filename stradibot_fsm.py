@@ -350,6 +350,8 @@ def main():
     # Solenoid setup
     sol = None
     current_fret = 0  # track active fret to avoid redundant serial commands
+    pending_fret = None       # (fret, time) — delayed fret activation on string switch
+    FRET_SWITCH_DELAY = 0.1   # seconds to wait before pressing new fret on string switch
     if SOLENOID_PORT is not None:
         sol = Solenoid(SOLENOID_PORT)
 
@@ -389,6 +391,17 @@ def main():
             # Advance MIDI clock only when actively bowing or hovering
             if MIDI_MODE and midi_start_time is not None and state in (State.BOWING, State.HOVERING):
                 midi_elapsed += LOOP_DT
+
+            # Activate pending fret after delay (non-blocking)
+            if pending_fret is not None and sol:
+                fret_val, fret_time = pending_fret
+                if loop_time - fret_time >= FRET_SWITCH_DELAY:
+                    if fret_val > 0:
+                        sol.set_fret(fret_val)
+                    else:
+                        sol.release()
+                    current_fret = fret_val
+                    pending_fret = None
             
             # send solenoid keep alive 
             if sol and current_fret > 0 and state == State.BOWING:
@@ -569,6 +582,7 @@ def main():
                     if key == '0':
                         homing_safety(r, home_pos, home_ori, sol)
                         current_fret = 0
+                        pending_fret = None
                         state = State.HOMING
                     if key == 'p' and MIDI_MODE and midi_start_time is None:
                         r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
@@ -603,13 +617,11 @@ def main():
                             print(f"\nNote off → HOVERING")
                             state = State.HOVERING
                         elif ev.string_idx != TARGET_STRING:
-                            # string switch — update fret only if changed
+                            # string switch — delay fret change
                             if sol and ev.fret != current_fret:
-                                if ev.fret > 0:
-                                    sol.set_fret(ev.fret)
-                                else:
-                                    sol.release()
-                                current_fret = ev.fret
+                                sol.release()
+                                current_fret = 0
+                                pending_fret = (ev.fret, loop_time)
                             TARGET_STRING = ev.string_idx
                             lift_goal_pos = cur_pos - LIFT_HEIGHT * str_normal
                             set_goal(r, lift_goal_pos, cur_ori)
@@ -641,6 +653,7 @@ def main():
                     if key in ('0'):
                         homing_safety(r, home_pos, home_ori, sol)
                         current_fret = 0
+                        pending_fret = None
                         state = State.HOMING
 
                 if p_err < 0.02:
@@ -667,18 +680,18 @@ def main():
                     if key == '0':
                         homing_safety(r, home_pos, home_ori, sol)
                         current_fret = 0
+                        pending_fret = None
                         state = State.HOMING
 
                 if MIDI_MODE:
                     ev, midi_event_idx = get_midi_event(midi_kb, midi_events, midi_event_idx, midi_elapsed, midi_start_time is not None)
                     if ev is not None and not ev.note_off:
-                        if sol and ev.fret != current_fret:
-                            if ev.fret > 0:
-                                sol.set_fret(ev.fret)
-                            else:
-                                sol.release()
-                            current_fret = ev.fret
                         if ev.string_idx != TARGET_STRING:
+                            # string switch — delay fret change
+                            if sol and ev.fret != current_fret:
+                                sol.release()
+                                current_fret = 0
+                                pending_fret = (ev.fret, loop_time)
                             TARGET_STRING = ev.string_idx
                             str_ori     = cal_orientations[TARGET_STRING]
                             str_pos     = cal_positions[TARGET_STRING]
@@ -690,7 +703,13 @@ def main():
                             print(f"\nNote on string {TARGET_STRING}, fret {ev.fret} → MOVING")
                             state = State.MOVING
                         else:
-                            # same string — go straight to PLACING
+                            # same string — activate fret immediately
+                            if sol and ev.fret != current_fret:
+                                if ev.fret > 0:
+                                    sol.set_fret(ev.fret)
+                                else:
+                                    sol.release()
+                                current_fret = ev.fret
                             contact_goal_pos = str_pos - LIFT_HEIGHT * str_normal
                             set_goal(r, contact_goal_pos, str_ori)
                             print(f"\nNote on same string {TARGET_STRING}, fret {ev.fret} → PLACING")
