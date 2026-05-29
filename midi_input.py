@@ -151,9 +151,11 @@ def parse_midi_file(filename: str, speed_multiplier: float = 1.0) -> list:
 
     events.sort(key=lambda e: e.start_time)
 
-    # Remove note_off events when a note_on starts at the same time (no actual rest)
-    note_on_times = set(e.start_time for e in events if not e.note_off)
-    events = [e for e in events if not (e.note_off and e.start_time in note_on_times)]
+    # Remove note_off events when a note_on starts at (or very near) the same time
+    note_on_times = [e.start_time for e in events if not e.note_off]
+    def has_nearby_note_on(t):
+        return any(abs(t - on_t) < 0.01 for on_t in note_on_times)
+    events = [e for e in events if not (e.note_off and has_nearby_note_on(e.start_time))]
 
     print(f"Parsed {sum(1 for e in events if not e.note_off)} notes from {filename}")
     return events
