@@ -26,11 +26,12 @@ from dataclasses import dataclass
 # ============================================================
 
 MIDI_MODE        = True          # True = MIDI drives string switches
-MIDI_FILE        = "twinkle-twinkle-little-star.mid"           # e.g. "piece.mid" — None = live keyboard
-MIDI_SPEED       = 20.0            # >1.0 slows down file playback
+MIDI_FILE        = "Twinkle Twinkle Little Star (MIDI Version).mid" 
+# MIDI_FILE        = "Canon in C - stradibot-Violon.midi"           # e.g. "piece.mid" — None = live keyboard
+MIDI_SPEED       = 2.0            # >1.0 slows down file playback
 # MIDI_PORT      = None           # None = first available port (live mode)
 
-SOLENOID_PORT    = None           # e.g. "/dev/cu.usbmodemXXXX" — None = no solenoids
+SOLENOID_PORT    = "/dev/ttyACM0"           # e.g. "/dev/cu.usbmodemXXXX" — None = no solenoids
 
 if MIDI_MODE:
     from midi_input import parse_midi_file, MidiKeyboard, MidiEvent
@@ -51,11 +52,12 @@ CONTACT_APPROACH_SPEED  = 0.03   # m/s — how fast to creep toward the string
 ANGULAR_SPEED           = np.pi/8    # rad/s — for orientation corrections during bowing
 SAFETY_SPEED            = 0.04
 CONTACT_FORCE_THRESHOLD = 1.2    # N   — force magnitude to detect contact
-BOW_SPEED               = 0.1   # m/s
+BOW_SPEED               = 0.08   # m/s
 # BOW_SPEED               = 0.01
-BOW_AMPLITUDE           = 0.07   # m   — half-stroke
+BOW_AMPLITUDE           = 0.20   # m   — half-stroke
 # DESIRED_BOW_FORCE       = 0.7    # N   — normal force on string
 DESIRED_BOW_FORCE       = 1.3
+STRING_BOW_FORCE        = [0.7, 0.7, 0.7, 0.7]
 DESIRED_BOW_MOMENT       = 0.2
 # DESIRED_BOW_MOMENT       = 0.14
 BOW_OFFSET              = 0.35   # m   — offset along bow direction from string position
@@ -73,9 +75,10 @@ CHEAT_POS_STEP                = 0.0003  # m per loop — bow goal nudge along st
 STRING_MOMENT_PLUS          = [0.22, 0.32, 0.40, 0.35] # String 1,2,3,4
 STRING_MOMENT_MINUS         = [0.17, 0.25, 0.25, 0.25]
 
-IS_REAL = False
-CALIBRATION = False
+IS_REAL = True
+CALIBRATION = True
 GOING_TO_ZERO = False
+CONTROL = "force"
 
 if IS_REAL:
     # CONFIG_FILE = "stradibot.xml"
@@ -166,7 +169,9 @@ else:
     STRING_ORIENTATIONS = [np.eye(3), np.eye(3), np.eye(3), np.eye(3)]
 
 # INITIALIZATION CONSTANTS
-INIT_JOINT_POS = [1.178460,-1.101560,-1.861230,1.604370,1.033080,-0.245748,0.983508]
+INIT_JOINT_POS = [1.249260,-1.236980,-1.828240,1.717140,1.172930,-0.126265,1.002390]
+#  [1.178460,-1.101560,-1.861230,1.604370,1.033080,-0.245748,0.983508]
+
 ZERO_JOINT_POS = [0.0] * 7
 
 # ============================================================
@@ -279,6 +284,7 @@ def main():
     while r.get(KEYS.active_controller).decode() != CONTROLLER:
         r.set(KEYS.active_controller, CONTROLLER)
     print(f"Controller: {CONTROLLER}")
+    time.sleep(0.1)
 
     # Read startup pose — used as home
     home_pos = get_pos(r)
@@ -383,6 +389,10 @@ def main():
             # Advance MIDI clock only when actively bowing or hovering
             if MIDI_MODE and midi_start_time is not None and state in (State.BOWING, State.HOVERING):
                 midi_elapsed += LOOP_DT
+            
+            # send solenoid keep alive 
+            if sol and current_fret > 0 and state == State.BOWING:
+                sol.set_fret(current_fret)
 
             # ── INITIALIZING ──────────────────────────────────────────────
             if state == State.ZEROING:
@@ -503,11 +513,20 @@ def main():
                 if force_normal_mag > CONTACT_FORCE_THRESHOLD:
                     print(f"\nState: CHEATING  (contact detected |F|={force_normal_mag:.3f} N)")
                     bow_dir = 1.0 ## starting to the minus
-                    DESIRED_BOW_MOMENT = STRING_MOMENT_MINUS[TARGET_STRING]
 
-                    r.set(KEYS.moment_space_dim, "1")
-                    r.set(KEYS.moment_space_axis, json.dumps(str_moment_axis.tolist()))
-                    r.set(KEYS.desired_moment,    json.dumps((DESIRED_BOW_MOMENT * str_moment_axis).tolist()))
+                    if CONTROL == "force":
+                        DESIRED_BOW_FORCE = STRING_BOW_FORCE[TARGET_STRING]
+                        r.set(KEYS.force_space_dim, "1")
+                        r.set(KEYS.force_space_axis, json.dumps(str_normal.tolist()))
+                        r.set(KEYS.desired_force,    json.dumps((DESIRED_BOW_FORCE * str_normal).tolist()))
+                        r.set(KEYS.closed_loop, "1")
+
+                    if CONTROL == "moment":
+                        DESIRED_BOW_MOMENT = STRING_MOMENT_MINUS[TARGET_STRING]
+                        r.set(KEYS.moment_space_dim, "1")
+                        r.set(KEYS.moment_space_axis, json.dumps(str_moment_axis.tolist()))
+                        r.set(KEYS.desired_moment,    json.dumps((DESIRED_BOW_MOMENT * str_moment_axis).tolist()))
+
                     set_linear_vel_limit(r, BOW_SPEED)
                     state = State.BOWING
 
@@ -533,7 +552,8 @@ def main():
                     bow_dir = 1.0 # Going to the minus
                     DESIRED_BOW_MOMENT = STRING_MOMENT_MINUS[TARGET_STRING]
 
-                r.set(KEYS.desired_moment,    json.dumps((DESIRED_BOW_MOMENT * str_moment_axis).tolist()))
+                if CONTROL == "moment":
+                    r.set(KEYS.desired_moment,    json.dumps((DESIRED_BOW_MOMENT * str_moment_axis).tolist()))
                 
                 bowing_goal_pos = str_pos + bow_dir * BOW_AMPLITUDE * str_bow_dir
                 set_goal(r, bowing_goal_pos, str_ori)
