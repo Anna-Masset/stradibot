@@ -47,7 +47,7 @@ LOOP_DT        = 0.01   # 100 Hz
 
 TARGET_STRING  = 1       # which string to bow (0=G, 1=D, 2=A, 3=E)
 
-MOVING_SPEED            = 0.08    # m/s — how fast to move when not contacting
+MOVING_SPEED            = 0.15    # m/s — how fast to move when not contacting
 CONTACT_APPROACH_SPEED  = 0.03   # m/s — how fast to creep toward the string
 ANGULAR_SPEED           = np.pi/8    # rad/s — for orientation corrections during bowing
 SAFETY_SPEED            = 0.04
@@ -62,8 +62,8 @@ DESIRED_BOW_MOMENT       = 0.2
 # DESIRED_BOW_MOMENT       = 0.14
 BOW_OFFSET              = 0.35   # m   — offset along bow direction from string position
 
-LIFT_HEIGHT             = 0.01   # m   — how far to lift along string normal when switching
-MOVING_ANGULAR_SPEED    = np.pi/3
+LIFT_HEIGHT             = 0.025   # m   — how far to lift along string normal when switching
+MOVING_ANGULAR_SPEED    = np.pi/2.5
 
 MOVE_THRESHOLD          = 0.15   # m   — lateral distance along bow dir to stop above new string
 
@@ -545,10 +545,10 @@ def main():
                     print(f"  BOWING str={TARGET_STRING}  |F|={force_normal_mag:.3f} N")
                     last_print = loop_time
                 
-                if bow_displacement >= BOW_AMPLITUDE * 0.9:
+                if bow_displacement >= BOW_AMPLITUDE * 0.9 and bow_dir > 0:
                     bow_dir = -1.0 # Going to the plus
                     DESIRED_BOW_MOMENT = STRING_MOMENT_PLUS[TARGET_STRING]
-                elif bow_displacement <= -BOW_AMPLITUDE * 0.9:
+                elif bow_displacement <= -BOW_AMPLITUDE * 0.9 and bow_dir < 0:
                     bow_dir = 1.0 # Going to the minus
                     DESIRED_BOW_MOMENT = STRING_MOMENT_MINUS[TARGET_STRING]
 
@@ -598,6 +598,8 @@ def main():
                                 sol.release()
                                 current_fret = 0
                             lift_goal_pos = cur_pos - LIFT_HEIGHT * str_normal
+                            r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
+                            set_linear_vel_limit(r, MOVING_SPEED)
                             set_goal(r, lift_goal_pos, cur_ori)
                             set_position_control(r)
                             print(f"\nNote off → HOVERING")
@@ -616,6 +618,8 @@ def main():
                             set_position_control(r)
                             time.sleep(0.1)
                             set_goal(r, lift_goal_pos, cur_ori)
+                            r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
+                            set_linear_vel_limit(r, MOVING_SPEED)
                             print(f"\nMIDI string switch → string {TARGET_STRING}, fret {ev.fret} → LIFTING")
                             state = State.LIFTING
                         else:
@@ -687,12 +691,16 @@ def main():
                             str_bow_dir = str_ori[:, 0]
                             move_goal_pos = str_pos - LIFT_HEIGHT * str_normal
                             set_goal(r, move_goal_pos, str_ori)
+                            r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
+                            set_linear_vel_limit(r, MOVING_SPEED)
                             print(f"\nNote on string {TARGET_STRING}, fret {ev.fret} → MOVING")
                             state = State.MOVING
                         else:
                             # same string — go straight to PLACING
                             contact_goal_pos = str_pos - LIFT_HEIGHT * str_normal
                             set_goal(r, contact_goal_pos, str_ori)
+                            r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
+                            set_linear_vel_limit(r, MOVING_SPEED)
                             print(f"\nNote on same string {TARGET_STRING}, fret {ev.fret} → PLACING")
                             state = State.PLACING
 
@@ -706,6 +714,8 @@ def main():
                 if lateral_dist <= MOVE_THRESHOLD:
                     contact_goal_pos = str_pos - LIFT_HEIGHT * str_normal
                     set_goal(r, contact_goal_pos, str_ori)
+                    r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
+                    set_linear_vel_limit(r, MOVING_SPEED)
                     print(f"\nState: PLACING  (descending to string {TARGET_STRING})")
                     state = State.PLACING
 
