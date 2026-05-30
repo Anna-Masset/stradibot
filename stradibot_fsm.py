@@ -607,16 +607,13 @@ def main():
                     ev, midi_event_idx = get_midi_event(midi_kb, midi_events, midi_event_idx, midi_elapsed, midi_start_time is not None)
                     if ev is not None:
                         if ev.note_off:
-                            # lift off — go to HOVERING
+                            # rest — stop bow in place, wait for next note
+                            pending_fret = None
                             if sol and current_fret != 0:
                                 sol.release()
                                 current_fret = 0
-                            lift_goal_pos = cur_pos - LIFT_HEIGHT * str_normal
-                            r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
-                            set_linear_vel_limit(r, MOVING_SPEED)
-                            set_goal(r, lift_goal_pos, cur_ori)
-                            set_position_control(r)
-                            print(f"\nNote off → HOVERING")
+                            set_goal(r, cur_pos, cur_ori)
+                            print(f"\nNote off → HOVERING (bow stopped)")
                             state = State.HOVERING
                         elif ev.string_idx != TARGET_STRING:
                             # string switch — delay fret change
