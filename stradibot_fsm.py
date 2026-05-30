@@ -26,7 +26,7 @@ from dataclasses import dataclass
 # ============================================================
 
 MIDI_MODE        = True          # True = MIDI drives string switches
-MIDI_FILE        = "Twinkle Twinkle Little Star (MIDI Version).mid" 
+MIDI_FILE        = "bach_ave-maria.mid" 
 # MIDI_FILE        = "Canon in C - stradibot-Violon.midi"           # e.g. "piece.mid" — None = live keyboard
 MIDI_SPEED       = 2.0            # >1.0 slows down file playback
 # MIDI_PORT      = None           # None = first available port (live mode)
@@ -57,13 +57,13 @@ BOW_SPEED               = 0.08   # m/s
 BOW_AMPLITUDE           = 0.20   # m   — half-stroke
 # DESIRED_BOW_FORCE       = 0.7    # N   — normal force on string
 DESIRED_BOW_FORCE       = 1.3
-STRING_BOW_FORCE        = [0.7, 0.7, 0.7, 0.7]
+STRING_BOW_FORCE        = [0.5, 0.5, 0.4, 0.4]
 DESIRED_BOW_MOMENT       = 0.2
 # DESIRED_BOW_MOMENT       = 0.14
 BOW_OFFSET              = 0.35   # m   — offset along bow direction from string position
 
 LIFT_HEIGHT             = 0.02   # m   — how far to lift along string normal when switching
-MOVING_ANGULAR_SPEED    = np.pi/2.5
+MOVING_ANGULAR_SPEED    = np.pi/2
 
 MOVE_THRESHOLD          = 0.15   # m   — lateral distance along bow dir to stop above new string
 

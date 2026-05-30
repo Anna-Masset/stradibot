@@ -26,7 +26,7 @@ from dataclasses import dataclass
 # ============================================================
 
 MIDI_MODE        = True          # True = MIDI drives string switches
-MIDI_FILE        = "Twinkle Twinkle Little Star (MIDI Version).mid" 
+MIDI_FILE        = "air-on-the-g-string-johann-sebastian-bach.mid" 
 # MIDI_FILE        = "Canon in C - stradibot-Violon.midi"           # e.g. "piece.mid" — None = live keyboard
 MIDI_SPEED       = 2.0            # >1.0 slows down file playback
 # MIDI_PORT      = None           # None = first available port (live mode)
@@ -47,8 +47,8 @@ LOOP_DT        = 0.01   # 100 Hz
 
 TARGET_STRING  = 1       # which string to bow (0=G, 1=D, 2=A, 3=E)
 
-MOVING_SPEED            = 0.15    # m/s — how fast to move when not contacting
-CONTACT_APPROACH_SPEED  = 0.03   # m/s — how fast to creep toward the string
+MOVING_SPEED            = 0.25    # m/s — how fast to move when not contacting
+CONTACT_APPROACH_SPEED  = 0.06   # m/s — how fast to creep toward the string
 ANGULAR_SPEED           = np.pi/8    # rad/s — for orientation corrections during bowing
 SAFETY_SPEED            = 0.04
 CONTACT_FORCE_THRESHOLD = 1.2    # N   — force magnitude to detect contact
@@ -57,20 +57,20 @@ BOW_SPEED               = 0.08   # m/s
 BOW_AMPLITUDE           = 0.20   # m   — half-stroke
 # DESIRED_BOW_FORCE       = 0.7    # N   — normal force on string
 DESIRED_BOW_FORCE       = 1.3
-STRING_BOW_FORCE        = [0.7, 0.7, 0.7, 0.7]
+STRING_BOW_FORCE        = [0.6, 0.6, 0.5, 0.5]
 DESIRED_BOW_MOMENT       = 0.2
 # DESIRED_BOW_MOMENT       = 0.14
 BOW_OFFSET              = 0.35   # m   — offset along bow direction from string position
 
-LIFT_HEIGHT             = 0.025   # m   — how far to lift along string normal when switching
-LIFT_HEIGHT_FAR         = 0.05    # m   — higher lift for non-adjacent string switches
+LIFT_HEIGHT             = 0.01   # m   — how far to lift along string normal when switching
+LIFT_HEIGHT_FAR         = 0.04    # m   — higher lift for non-adjacent string switches
 
 def get_lift_height(from_string, to_string):
     """Use higher lift when going from higher to lower string number and non-adjacent."""
     if from_string > to_string and from_string - to_string > 1:
         return LIFT_HEIGHT_FAR
     return LIFT_HEIGHT
-MOVING_ANGULAR_SPEED    = np.pi/2.5
+MOVING_ANGULAR_SPEED    = np.pi/1.5
 
 MOVE_THRESHOLD          = 0.15   # m   — lateral distance along bow dir to stop above new string
 
@@ -713,8 +713,8 @@ def main():
                             set_goal(r, move_goal_pos, str_ori)
                             r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
                             set_linear_vel_limit(r, MOVING_SPEED)
-                            print(f"\nNote on string {TARGET_STRING}, fret {ev.fret} → MOVING")
-                            state = State.MOVING
+                            print(f"\nNote on string {TARGET_STRING}, fret {ev.fret} → LIFTING")
+                            state = State.LIFTING
                         else:
                             # same string — activate fret immediately
                             if sol and ev.fret != current_fret:
