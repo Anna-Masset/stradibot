@@ -704,13 +704,8 @@ def main():
                                 pending_fret = (ev.fret, loop_time)
                             lift_h = get_lift_height(TARGET_STRING, ev.string_idx)
                             TARGET_STRING = ev.string_idx
-                            str_ori     = cal_orientations[TARGET_STRING]
-                            str_pos     = cal_positions[TARGET_STRING]
-                            str_normal  = str_ori[:, 2]
-                            str_moment_axis  = str_ori[:, 1]
-                            str_bow_dir = str_ori[:, 0]
-                            move_goal_pos = str_pos - lift_h * str_normal
-                            set_goal(r, move_goal_pos, str_ori)
+                            lift_goal_pos = cur_pos - lift_h * str_normal
+                            set_goal(r, lift_goal_pos, cur_ori)
                             r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
                             set_linear_vel_limit(r, MOVING_SPEED)
                             print(f"\nNote on string {TARGET_STRING}, fret {ev.fret} → LIFTING")
