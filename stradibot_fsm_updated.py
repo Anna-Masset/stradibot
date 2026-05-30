@@ -66,8 +66,8 @@ LIFT_HEIGHT             = 0.025   # m   — how far to lift along string normal 
 LIFT_HEIGHT_FAR         = 0.05    # m   — higher lift for non-adjacent string switches
 
 def get_lift_height(from_string, to_string):
-    """Use higher lift when jumping over strings (non-adjacent)."""
-    if abs(from_string - to_string) > 1:
+    """Use higher lift when going from higher to lower string number and non-adjacent."""
+    if from_string > to_string and from_string - to_string > 1:
         return LIFT_HEIGHT_FAR
     return LIFT_HEIGHT
 MOVING_ANGULAR_SPEED    = np.pi/2.5
