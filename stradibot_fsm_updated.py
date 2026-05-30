@@ -706,6 +706,9 @@ def main():
                             TARGET_STRING = ev.string_idx
                             lift_goal_pos = cur_pos - lift_h * str_normal
                             set_goal(r, lift_goal_pos, cur_ori)
+                            set_position_control(r)
+                            time.sleep(0.1)
+                            set_goal(r, lift_goal_pos, cur_ori)
                             r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
                             set_linear_vel_limit(r, MOVING_SPEED)
                             print(f"\nNote on string {TARGET_STRING}, fret {ev.fret} → LIFTING")
