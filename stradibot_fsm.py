@@ -48,7 +48,7 @@ LOOP_DT        = 0.01   # 100 Hz
 TARGET_STRING  = 1       # which string to bow (0=G, 1=D, 2=A, 3=E)
 
 MOVING_SPEED            = 0.15    # m/s — how fast to move when not contacting
-CONTACT_APPROACH_SPEED  = 0.03   # m/s — how fast to creep toward the string
+CONTACT_APPROACH_SPEED  = 0.05   # m/s — how fast to creep toward the string
 ANGULAR_SPEED           = np.pi/8    # rad/s — for orientation corrections during bowing
 SAFETY_SPEED            = 0.04
 CONTACT_FORCE_THRESHOLD = 1.2    # N   — force magnitude to detect contact
@@ -62,7 +62,7 @@ DESIRED_BOW_MOMENT       = 0.2
 # DESIRED_BOW_MOMENT       = 0.14
 BOW_OFFSET              = 0.35   # m   — offset along bow direction from string position
 
-LIFT_HEIGHT             = 0.025   # m   — how far to lift along string normal when switching
+LIFT_HEIGHT             = 0.02   # m   — how far to lift along string normal when switching
 MOVING_ANGULAR_SPEED    = np.pi/2.5
 
 MOVE_THRESHOLD          = 0.15   # m   — lateral distance along bow dir to stop above new string
@@ -351,7 +351,7 @@ def main():
     sol = None
     current_fret = 0  # track active fret to avoid redundant serial commands
     pending_fret = None       # (fret, time) — delayed fret activation on string switch
-    FRET_SWITCH_DELAY = 0.1   # seconds to wait before pressing new fret on string switch
+    FRET_SWITCH_DELAY = 0.2   # seconds to wait before pressing new fret on string switch
     if SOLENOID_PORT is not None:
         sol = Solenoid(SOLENOID_PORT)
 
@@ -524,7 +524,7 @@ def main():
                     last_print = loop_time
 
                 if force_normal_mag > CONTACT_FORCE_THRESHOLD:
-                    print(f"\nState: CHEATING  (contact detected |F|={force_normal_mag:.3f} N)")
+                    print(f"\nState: BOWING  (contact detected |F|={force_normal_mag:.3f} N)")
                     bow_dir = 1.0 ## starting to the minus
 
                     if CONTROL == "force":
@@ -571,10 +571,10 @@ def main():
                 bowing_goal_pos = str_pos + bow_dir * BOW_AMPLITUDE * str_bow_dir
                 set_goal(r, bowing_goal_pos, str_ori)
 
-                if loop_time - last_print > 0.5:
-                    print(f"  BOWING str={TARGET_STRING}  F_n={force_normal:+.3f} N "
-                          f"|F|={force_normal_mag:.3f} N offset={bow_normal_offset:+.4f} m")
-                    last_print = loop_time
+                # if loop_time - last_print > 0.5:
+                #     print(f"  BOWING str={TARGET_STRING}  F_n={force_normal:+.3f} N "
+                #           f"|F|={force_normal_mag:.3f} N offset={bow_normal_offset:+.4f} m")
+                #     last_print = loop_time
 
                 # ── keyboard input ──
                 if not key_queue.empty():
@@ -608,6 +608,7 @@ def main():
                     if ev is not None:
                         if ev.note_off:
                             # lift off — go to HOVERING
+                            pending_fret = None
                             if sol and current_fret != 0:
                                 sol.release()
                                 current_fret = 0
