@@ -620,6 +620,8 @@ def main():
                             if sol and current_fret != 0:
                                 sol.release()
                                 current_fret = 0
+                            set_position_control(r)
+                            time.sleep(0.1)
                             set_goal(r, cur_pos, cur_ori)
                             print(f"\nNote off → HOVERING (bow stopped)")
                             state = State.HOVERING
