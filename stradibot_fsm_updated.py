@@ -26,7 +26,7 @@ from dataclasses import dataclass
 # ============================================================
 
 MIDI_MODE        = True          # True = MIDI drives string switches
-MIDI_FILE        = "air-on-the-g-string-johann-sebastian-bach.mid" 
+MIDI_FILE        = "game of thrones.mid" 
 # MIDI_FILE        = "Canon in C - stradibot-Violon.midi"           # e.g. "piece.mid" — None = live keyboard
 MIDI_SPEED       = 2.0            # >1.0 slows down file playback
 # MIDI_PORT      = None           # None = first available port (live mode)
@@ -62,7 +62,7 @@ DESIRED_BOW_MOMENT       = 0.2
 # DESIRED_BOW_MOMENT       = 0.14
 BOW_OFFSET              = 0.35   # m   — offset along bow direction from string position
 
-LIFT_HEIGHT             = 0.01   # m   — how far to lift along string normal when switching
+LIFT_HEIGHT             = 0.025   # m   — how far to lift along string normal when switching
 LIFT_HEIGHT_FAR         = 0.04    # m   — higher lift for non-adjacent string switches
 
 def get_lift_height(from_string, to_string):
@@ -592,8 +592,8 @@ def main():
                         pending_fret = None
                         state = State.HOMING
                     if key == 'p' and MIDI_MODE and midi_start_time is None:
-                        r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
-                        set_linear_vel_limit(r, MOVING_SPEED)
+                        # r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
+                        # set_linear_vel_limit(r, MOVING_SPEED)
                         midi_start_time = loop_time
                         print(f"MIDI playback started")
                     new_string = {'5': 0, '6': 1, '7': 2, '8': 3}.get(key)
