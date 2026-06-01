@@ -520,6 +520,7 @@ def main():
                         state = State.PLACING
                     elif key == 'c' and CALIBRATION:
                         set_floating(r)
+                        time.sleep(0.1)
                         print(f"\nState: CALIBRATING  (floating — press 1/2/3/4 to register strings, Enter to home)")
                         state = State.CALIBRATING
 
@@ -614,9 +615,15 @@ def main():
                         homing_safety(r, home_pos, home_ori, sol)
                         current_fret = 0
                         pending_fret = None
+                        midi_start_time = None
+                        midi_event_idx = 0
+                        midi_elapsed = 0.0
                         state = State.HOMING
-                    if key == 'p' and MIDI_MODE and midi_start_time is None:
-                        # r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
+                    if key == 'p' and MIDI_MODE:
+                        midi_event_idx = 0
+                        midi_elapsed = 0.0
+                        midi_start_time = loop_time
+                        print(f"MIDI playback started (from beginning)")
                         # set_linear_vel_limit(r, MOVING_SPEED)
                         midi_start_time = loop_time
                         print(f"MIDI playback started")
@@ -690,6 +697,9 @@ def main():
                         homing_safety(r, home_pos, home_ori, sol)
                         current_fret = 0
                         pending_fret = None
+                        midi_start_time = None
+                        midi_event_idx = 0
+                        midi_elapsed = 0.0
                         state = State.HOMING
 
                 if p_err < 0.02:
@@ -717,6 +727,9 @@ def main():
                         homing_safety(r, home_pos, home_ori, sol)
                         current_fret = 0
                         pending_fret = None
+                        midi_start_time = None
+                        midi_event_idx = 0
+                        midi_elapsed = 0.0
                         state = State.HOMING
 
                 if MIDI_MODE:
