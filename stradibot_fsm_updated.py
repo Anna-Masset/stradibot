@@ -26,7 +26,7 @@ from dataclasses import dataclass
 # ============================================================
 
 MIDI_MODE        = True          # True = MIDI drives string switches
-MIDI_FILE        = "game of thrones.mid" 
+MIDI_FILE        = "Twinkle Twinkle Little Star (MIDI Version).mid" 
 # MIDI_FILE        = "Canon in C - stradibot-Violon.midi"           # e.g. "piece.mid" — None = live keyboard
 MIDI_SPEED       = 2.0            # >1.0 slows down file playback
 # MIDI_PORT      = None           # None = first available port (live mode)
