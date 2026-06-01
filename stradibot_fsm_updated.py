@@ -37,6 +37,7 @@ if MIDI_MODE:
     from midi_input import parse_midi_file, MidiKeyboard, MidiEvent
 if SOLENOID_PORT is not None:
     from solenoid import Solenoid
+from calibration import save_calibration, load_calibration, calibration_exists
 
 # ============================================================
 # CONFIG
@@ -321,6 +322,19 @@ def main():
     # ── State machine variables ──────────────────────────────
     if GOING_TO_ZERO and CALIBRATION:
         state = State.ZEROING
+    elif not GOING_TO_ZERO and CALIBRATION and calibration_exists():
+        # Load saved calibration — skip to HOMING
+        cal_positions, cal_orientations = load_calibration()
+        str_ori     = cal_orientations[TARGET_STRING]
+        str_pos     = cal_positions[TARGET_STRING]
+        str_normal  = str_ori[:, 2]
+        str_moment_axis  = str_ori[:, 1]
+        str_bow_dir = str_ori[:, 0]
+        r.set(KEYS.active_controller, "cartesian_controller")
+        time.sleep(0.1)
+        r.set(KEYS.posture_task, json.dumps(INIT_JOINT_POS))
+        state = State.HOMING
+        print("Using saved calibration — press 'c' in HOMING to recalibrate")
     elif not GOING_TO_ZERO and CALIBRATION:
         state = State.CALIBRATING
     # elif not GOING_TO_ZERO and not CALIBRATION and not IS_REAL:
@@ -373,11 +387,14 @@ def main():
     set_linear_vel_limit(r, MOVING_SPEED)
     r.set(KEYS.angular_vel_sat_limit, str(ANGULAR_SPEED))
 
-    if CALIBRATION and not GOING_TO_ZERO:
+    if CALIBRATION and not GOING_TO_ZERO and state == State.CALIBRATING:
         set_floating(r)
     else:
         set_position_control(r)
-    set_goal(r, np.array([ 0.940193, -0.078024,  0.310439]), home_ori)
+    if state == State.HOMING:
+        set_goal(r, home_pos, home_ori)
+    else:
+        set_goal(r, np.array([ 0.940193, -0.078024,  0.310439]), home_ori)
 
     # Initialization joint controller setup
     if GOING_TO_ZERO:
@@ -462,6 +479,7 @@ def main():
                         time.sleep(0.1)
                         set_floating(r)
                     elif key == '':  # bare Enter → done
+                        save_calibration(cal_positions, cal_orientations)
                         print("\nCalibrated positions:")
                         for i, p in enumerate(cal_positions):
                             print(f"  String {i+1}: {p.round(4)}")
@@ -493,11 +511,17 @@ def main():
                     print(f"  HOMING  pos_err={p_err:.4f}  ori_err={o_err:.4f}")
                     last_print = loop_time
 
-                if not key_queue.empty() and key_queue.get().strip() == '':
-                    contact_goal_pos = str_pos - LIFT_HEIGHT * str_normal
-                    print(f"\nState: PLACING  (approaching string {TARGET_STRING})")
-                    set_goal(r, contact_goal_pos, str_ori)
-                    state = State.PLACING
+                if not key_queue.empty():
+                    key = key_queue.get().strip()
+                    if key == '':
+                        contact_goal_pos = str_pos - LIFT_HEIGHT * str_normal
+                        print(f"\nState: PLACING  (approaching string {TARGET_STRING})")
+                        set_goal(r, contact_goal_pos, str_ori)
+                        state = State.PLACING
+                    elif key == 'c' and CALIBRATION:
+                        set_floating(r)
+                        print(f"\nState: CALIBRATING  (floating — press 1/2/3/4 to register strings, Enter to home)")
+                        state = State.CALIBRATING
 
             # ── PLACING ───────────────────────────────────────────────
             elif state == State.PLACING:
