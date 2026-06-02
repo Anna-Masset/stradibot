@@ -26,9 +26,9 @@ from dataclasses import dataclass
 # ============================================================
 
 MIDI_MODE        = True          # True = MIDI drives string switches
-MIDI_FILE        = "Twinkle Twinkle Little Star (MIDI Version).mid" 
+MIDI_FILE        = "game of thrones.mid" 
 # MIDI_FILE        = "Canon in C - stradibot-Violon.midi"           # e.g. "piece.mid" — None = live keyboard
-MIDI_SPEED       = 2.0            # >1.0 slows down file playback
+MIDI_SPEED       = 4.0            # >1.0 slows down file playback
 # MIDI_PORT      = None           # None = first available port (live mode)
 
 SOLENOID_PORT    = "/dev/ttyACM0"           # e.g. "/dev/cu.usbmodemXXXX" — None = no solenoids
@@ -58,18 +58,23 @@ BOW_SPEED               = 0.08   # m/s
 BOW_AMPLITUDE           = 0.20   # m   — half-stroke
 # DESIRED_BOW_FORCE       = 0.7    # N   — normal force on string
 DESIRED_BOW_FORCE       = 1.3
-STRING_BOW_FORCE        = [0.6, 0.6, 0.5, 0.5]
+STRING_BOW_FORCE        = [0.8, 0.8, 0.7, 0.7]
 DESIRED_BOW_MOMENT       = 0.2
 # DESIRED_BOW_MOMENT       = 0.14
 BOW_OFFSET              = 0.35   # m   — offset along bow direction from string position
 
-LIFT_HEIGHT             = 0.025   # m   — how far to lift along string normal when switching
+LIFT_HEIGHT             = 0.015   # m   — how far to lift along string normal when switching
+LIFT_HEIGHT_MID         = 0.025   # m   — how far to lift along string normal when switching
 LIFT_HEIGHT_FAR         = 0.04    # m   — higher lift for non-adjacent string switches
 
 def get_lift_height(from_string, to_string):
     """Use higher lift when going from higher to lower string number and non-adjacent."""
     if from_string > to_string and from_string - to_string > 1:
         return LIFT_HEIGHT_FAR
+    if from_string == 2 and to_string == 1:
+        return LIFT_HEIGHT_FAR
+    if from_string == 1 and to_string == 0:
+        return LIFT_HEIGHT_MID
     return LIFT_HEIGHT
 MOVING_ANGULAR_SPEED    = np.pi/1.5
 
