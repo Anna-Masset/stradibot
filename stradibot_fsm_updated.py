@@ -26,9 +26,8 @@ from dataclasses import dataclass
 # ============================================================
 
 MIDI_MODE        = True          # True = MIDI drives string switches
-MIDI_FILE        = "midi_files/Twinkle Twinkle Little Star (MIDI Version).mid"
-# MIDI_FILE        = "midi_files/Canon in C - stradibot-Violon.midi"
-# MIDI_FILE        = None   # None = live keyboard mode
+MIDI_FILE        = None  # "river_flows_in_you.mid" 
+# MIDI_FILE        = "Canon in C - stradibot-Violon.midi"           # e.g. "piece.mid" — None = live keyboard
 MIDI_SPEED       = 2.0            # >1.0 slows down file playback
 MIDI_PORT      = "Oxygen 25:Oxygen 25Oxygen 25 24:0"           # None = first available port (live mode)
 
@@ -368,8 +367,11 @@ def main():
     if MIDI_MODE:
         if MIDI_FILE:
             midi_events = parse_midi_file(MIDI_FILE, speed_multiplier=MIDI_SPEED)
-            print(f"MIDI file loaded: {len(midi_events)//2} notes from {MIDI_FILE}")
-        print(f"\nIn HOMING: Enter=bow, p=play MIDI file, k=MIDI keyboard, 5-8=select string, c=recalibrate")
+            print(f"MIDI file mode: {len(midi_events)//2} notes loaded from {MIDI_FILE}")
+        else:
+            midi_kb = MidiKeyboard(MIDI_PORT)
+            midi_kb.start()
+            print(f"MIDI keyboard mode: live input active")
 
     # Solenoid setup
     sol = None
@@ -517,8 +519,6 @@ def main():
                 if not key_queue.empty():
                     key = key_queue.get().strip()
                     if key == '':
-                        set_linear_vel_limit(r, MOVING_SPEED)
-                        r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
                         contact_goal_pos = str_pos - LIFT_HEIGHT * str_normal
                         print(f"\nState: PLACING  (approaching string {TARGET_STRING})")
                         set_goal(r, contact_goal_pos, str_ori)
@@ -528,39 +528,6 @@ def main():
                         time.sleep(0.1)
                         print(f"\nState: CALIBRATING  (floating — press 1/2/3/4 to register strings, Enter to home)")
                         state = State.CALIBRATING
-                    elif key == 'p' and MIDI_MODE and MIDI_FILE:
-                        # Go to string and start MIDI playback
-                        midi_event_idx = 0
-                        midi_elapsed = 0.0
-                        midi_start_time = loop_time
-                        set_linear_vel_limit(r, MOVING_SPEED)
-                        r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
-                        contact_goal_pos = str_pos - LIFT_HEIGHT * str_normal
-                        set_goal(r, contact_goal_pos, str_ori)
-                        print(f"\nMIDI playback queued → PLACING (string {TARGET_STRING})")
-                        state = State.PLACING
-                    elif key == 'k' and MIDI_MODE:
-                        # Start live MIDI keyboard (or resume if already running)
-                        if midi_kb is None:
-                            midi_kb = MidiKeyboard()
-                            midi_kb.start()
-                        midi_start_time = loop_time
-                        set_linear_vel_limit(r, MOVING_SPEED)
-                        r.set(KEYS.angular_vel_sat_limit, str(MOVING_ANGULAR_SPEED))
-                        contact_goal_pos = str_pos - LIFT_HEIGHT * str_normal
-                        set_goal(r, contact_goal_pos, str_ori)
-                        print(f"\nMIDI keyboard active → PLACING (string {TARGET_STRING})")
-                        state = State.PLACING
-                    else:
-                        new_string = {'5': 0, '6': 1, '7': 2, '8': 3}.get(key)
-                        if new_string is not None and new_string != TARGET_STRING:
-                            TARGET_STRING = new_string
-                            str_ori     = cal_orientations[TARGET_STRING]
-                            str_pos     = cal_positions[TARGET_STRING]
-                            str_normal  = str_ori[:, 2]
-                            str_moment_axis  = str_ori[:, 1]
-                            str_bow_dir = str_ori[:, 0]
-                            print(f"\n  Target string changed to {TARGET_STRING}")
 
             # ── PLACING ───────────────────────────────────────────────
             elif state == State.PLACING:
@@ -594,7 +561,7 @@ def main():
                     last_print = loop_time
 
                 if force_normal_mag > CONTACT_FORCE_THRESHOLD:
-                    print(f"\nState: BOWING  (contact detected |F|={force_normal_mag:.3f} N)")
+                    print(f"\nState: CHEATING  (contact detected |F|={force_normal_mag:.3f} N)")
                     bow_dir = 1.0 ## starting to the minus
 
                     if CONTROL == "force":
@@ -641,6 +608,11 @@ def main():
                 bowing_goal_pos = str_pos + bow_dir * BOW_AMPLITUDE * str_bow_dir
                 set_goal(r, bowing_goal_pos, str_ori)
 
+                if loop_time - last_print > 0.5:
+                    print(f"  BOWING str={TARGET_STRING}  F_n={force_normal:+.3f} N "
+                          f"|F|={force_normal_mag:.3f} N offset={bow_normal_offset:+.4f} m")
+                    last_print = loop_time
+
                 # ── keyboard input ──
                 if not key_queue.empty():
                     key = key_queue.get().strip()
@@ -656,7 +628,10 @@ def main():
                         midi_event_idx = 0
                         midi_elapsed = 0.0
                         midi_start_time = loop_time
-                        print(f"MIDI playback restarted (from beginning)")
+                        print(f"MIDI playback started (from beginning)")
+                        # set_linear_vel_limit(r, MOVING_SPEED)
+                        midi_start_time = loop_time
+                        print(f"MIDI playback started")
                     new_string = {'5': 0, '6': 1, '7': 2, '8': 3}.get(key)
                     if new_string is not None and new_string != TARGET_STRING:
                         lift_h = get_lift_height(TARGET_STRING, new_string)
