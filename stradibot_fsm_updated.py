@@ -26,12 +26,12 @@ from dataclasses import dataclass
 # ============================================================
 
 MIDI_MODE        = True          # True = MIDI drives string switches
-MIDI_FILE        = None  # "river_flows_in_you.mid" 
+MIDI_FILE        = None # "midi_files/Twinkle Twinkle Little Star (MIDI Version).mid"
 # MIDI_FILE        = "Canon in C - stradibot-Violon.midi"           # e.g. "piece.mid" — None = live keyboard
 MIDI_SPEED       = 2.0            # >1.0 slows down file playback
 MIDI_PORT      = "Oxygen 25:Oxygen 25Oxygen 25 24:0"           # None = first available port (live mode)
 
-SOLENOID_PORT    = None # "/dev/ttyACM0"           # e.g. "/dev/cu.usbmodemXXXX" — None = no solenoids
+SOLENOID_PORT    = "/dev/ttyACM0"           # e.g. "/dev/cu.usbmodemXXXX" — None = no solenoids
 
 if MIDI_MODE:
     from midi_input import parse_midi_file, MidiKeyboard, MidiEvent
@@ -58,13 +58,15 @@ BOW_SPEED               = 0.08   # m/s
 BOW_AMPLITUDE           = 0.20   # m   — half-stroke
 # DESIRED_BOW_FORCE       = 0.7    # N   — normal force on string
 DESIRED_BOW_FORCE       = 1.3
-STRING_BOW_FORCE        = [0.6, 0.6, 0.5, 0.5]
+STRING_BOW_FORCE_START  = [0.6, 0.6, 0.6, 0.7]
+STRING_BOW_FORCE_PLUS   = [0.6, 0.6, 0.5, 0.5]
+STRING_BOW_FORCE_MINUS  = [0.6, 0.6, 0.6, 0.5]
 DESIRED_BOW_MOMENT       = 0.2
 # DESIRED_BOW_MOMENT       = 0.14
 BOW_OFFSET              = 0.35   # m   — offset along bow direction from string position
 
 LIFT_HEIGHT             = 0.015   # m   — how far to lift along string normal when switching
-LIFT_HEIGHT_MID         = 0.025   # m   — how far to lift along string normal when switching
+LIFT_HEIGHT_MID         = 0.035   # m   — how far to lift along string normal when switching
 LIFT_HEIGHT_FAR         = 0.04    # m   — higher lift for non-adjacent string switches
 
 def get_lift_height(from_string, to_string):
@@ -565,7 +567,7 @@ def main():
                     bow_dir = 1.0 ## starting to the minus
 
                     if CONTROL == "force":
-                        DESIRED_BOW_FORCE = STRING_BOW_FORCE[TARGET_STRING]
+                        DESIRED_BOW_FORCE = STRING_BOW_FORCE_START[TARGET_STRING]
                         r.set(KEYS.force_space_dim, "1")
                         r.set(KEYS.force_space_axis, json.dumps(str_normal.tolist()))
                         r.set(KEYS.desired_force,    json.dumps((DESIRED_BOW_FORCE * str_normal).tolist()))
@@ -598,13 +600,18 @@ def main():
                 if bow_displacement >= BOW_AMPLITUDE * 0.9 and bow_dir > 0:
                     bow_dir = -1.0 # Going to the plus
                     DESIRED_BOW_MOMENT = STRING_MOMENT_PLUS[TARGET_STRING]
+                    DESIRED_BOW_FORCE = STRING_BOW_FORCE_PLUS[TARGET_STRING]
                 elif bow_displacement <= -BOW_AMPLITUDE * 0.9 and bow_dir < 0:
                     bow_dir = 1.0 # Going to the minus
                     DESIRED_BOW_MOMENT = STRING_MOMENT_MINUS[TARGET_STRING]
+                    DESIRED_BOW_FORCE = STRING_BOW_FORCE_MINUS[TARGET_STRING]
 
                 if CONTROL == "moment":
                     r.set(KEYS.desired_moment,    json.dumps((DESIRED_BOW_MOMENT * str_moment_axis).tolist()))
-                
+
+                if CONTROL == "force":
+                    r.set(KEYS.desired_force,    json.dumps((DESIRED_BOW_FORCE * str_normal).tolist()))
+
                 bowing_goal_pos = str_pos + bow_dir * BOW_AMPLITUDE * str_bow_dir
                 set_goal(r, bowing_goal_pos, str_ori)
 

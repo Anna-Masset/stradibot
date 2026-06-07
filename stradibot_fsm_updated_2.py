@@ -32,7 +32,7 @@ MIDI_FILE        = "midi_files/Twinkle Twinkle Little Star (MIDI Version).mid"
 MIDI_SPEED       = 2.0            # >1.0 slows down file playback
 MIDI_PORT      = "Oxygen 25:Oxygen 25Oxygen 25 24:0"           # None = first available port (live mode)
 
-SOLENOID_PORT    = None # "/dev/ttyACM0"           # e.g. "/dev/cu.usbmodemXXXX" — None = no solenoids
+SOLENOID_PORT    = "/dev/ttyACM0"           # e.g. "/dev/cu.usbmodemXXXX" — None = no solenoids
 
 if MIDI_MODE:
     from midi_input import parse_midi_file, MidiKeyboard, MidiEvent
