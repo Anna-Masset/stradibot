@@ -26,12 +26,12 @@ from dataclasses import dataclass
 # ============================================================
 
 MIDI_MODE        = True          # True = MIDI drives string switches
-MIDI_FILE        = "game of thrones.mid" 
+MIDI_FILE        = None  # "river_flows_in_you.mid" 
 # MIDI_FILE        = "Canon in C - stradibot-Violon.midi"           # e.g. "piece.mid" — None = live keyboard
-MIDI_SPEED       = 4.0            # >1.0 slows down file playback
-# MIDI_PORT      = None           # None = first available port (live mode)
+MIDI_SPEED       = 2.0            # >1.0 slows down file playback
+MIDI_PORT      = "Oxygen 25:Oxygen 25Oxygen 25 24:0"           # None = first available port (live mode)
 
-SOLENOID_PORT    = "/dev/ttyACM0"           # e.g. "/dev/cu.usbmodemXXXX" — None = no solenoids
+SOLENOID_PORT    = None # "/dev/ttyACM0"           # e.g. "/dev/cu.usbmodemXXXX" — None = no solenoids
 
 if MIDI_MODE:
     from midi_input import parse_midi_file, MidiKeyboard, MidiEvent
@@ -58,7 +58,7 @@ BOW_SPEED               = 0.08   # m/s
 BOW_AMPLITUDE           = 0.20   # m   — half-stroke
 # DESIRED_BOW_FORCE       = 0.7    # N   — normal force on string
 DESIRED_BOW_FORCE       = 1.3
-STRING_BOW_FORCE        = [0.8, 0.8, 0.7, 0.7]
+STRING_BOW_FORCE        = [0.6, 0.6, 0.5, 0.5]
 DESIRED_BOW_MOMENT       = 0.2
 # DESIRED_BOW_MOMENT       = 0.14
 BOW_OFFSET              = 0.35   # m   — offset along bow direction from string position
@@ -369,7 +369,7 @@ def main():
             midi_events = parse_midi_file(MIDI_FILE, speed_multiplier=MIDI_SPEED)
             print(f"MIDI file mode: {len(midi_events)//2} notes loaded from {MIDI_FILE}")
         else:
-            midi_kb = MidiKeyboard()
+            midi_kb = MidiKeyboard(MIDI_PORT)
             midi_kb.start()
             print(f"MIDI keyboard mode: live input active")
 
