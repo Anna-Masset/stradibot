@@ -26,10 +26,10 @@ from dataclasses import dataclass
 # ============================================================
 
 MIDI_MODE        = True          # True = MIDI drives string switches
-MIDI_FILE        = None # "midi_files/Twinkle Twinkle Little Star (MIDI Version).mid"
+MIDI_FILE        = "midi_files/Twinkle Twinkle Little Star (MIDI Version).mid"
 # MIDI_FILE        = "Canon in C - stradibot-Violon.midi"           # e.g. "piece.mid" — None = live keyboard
-MIDI_SPEED       = 2.0            # >1.0 slows down file playback
-MIDI_PORT      = "Oxygen 25:Oxygen 25Oxygen 25 24:0"           # None = first available port (live mode)
+MIDI_SPEED       = 2.5            # >1.0 slows down file playback
+MIDI_PORT      = None # "Oxygen 25:Oxygen 25Oxygen 25 20:0"           # None = first available port (live mode)
 
 SOLENOID_PORT    = "/dev/ttyACM0"           # e.g. "/dev/cu.usbmodemXXXX" — None = no solenoids
 

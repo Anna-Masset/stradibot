@@ -1,0 +1,6 @@
+#!/home/src2/OpenSai/cs225a/project_starter/stradibot/.venv/bin/python
+import sys
+from mido.scripts.mido_play import main
+if __name__ == '__main__':
+    sys.argv[0] = sys.argv[0].removesuffix('.exe')
+    sys.exit(main())

@@ -1,0 +1,80 @@
+<redisConfiguration namespacePrefix="opensai" />
+
+<robotControlConfiguration robotName="Titania"
+	robotModelFile="${ROBOT_FILES_FOLDER}/Rizon4s.urdf">
+
+	<controller name="joint_controller">
+		<jointTask name="joint_task">
+			<velocitySaturation enabled="false"
+				velocityLimit="0.5 0.6 0.7 0.8 0.9 1.0 1.1" />
+			<otg type="acceleration"
+				maxVelocity="0.5"
+				maxAcceleration="1.0"
+				maxJerk="1.0" />
+
+			<gains kp="100.0"
+				kv="20.0"
+				ki="0.0" />
+
+		</jointTask>
+
+	</controller>
+
+	<controller name="cartesian_controller">
+		<motionForceTask name="cartesian_task"
+			linkName="flange"
+			parametrizatonInCompliantFrame="false"
+			bieThreshold="0.1">
+			
+			<velocitySaturation enabled="false"
+				linearVelocityLimit="0.25"
+				angularVelocityLimit="1.0" />
+
+			<otg type="acceleration"
+				maxLinearVelocity="0.1"
+				maxAngularVelocity="1.0"
+				maxLinearAcceleration="0.5"
+				maxAngularAcceleration="3.0"
+				maxLinearJerk="0.5"
+				maxAngularJerk="100" />
+
+			<positionGains kp="400.0"
+				kv="40.0"
+				ki="0.0" />
+
+			<orientationGains kp="400.0"
+				kv="40.0"
+				ki="0.0" />
+
+			<forceControl closedLoopForceControl="false">
+				<forceSensorFrame xyz="0 0 0"
+					rpy="3.14 0 0" />
+				
+				<forceSpaceParametrization dim="0"
+					direction="0 0 1" />
+
+				<momentSpaceParametrization dim="0"
+					direction="1 0 0" />
+				
+				<forceGains kp="3.0"
+						kv="20.0"
+						ki="2.0" />
+
+				<momentGains kp="1.0"
+					kv="0.0"
+					ki="1.5" />
+
+			</forceControl>
+
+		</motionForceTask>
+
+		<jointTask name="joint_task">
+			<otg type="disabled" />
+			<velocitySaturation enabled="true" />
+			<gains kp="100.0"
+				kv="20.0"
+				ki="0.0" />
+		</jointTask>
+	</controller>
+
+</robotControlConfiguration>

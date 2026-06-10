@@ -25,7 +25,7 @@ from dataclasses import dataclass
 # MIDI CONFIG  (set MIDI_MODE to enable)
 # ============================================================
 
-MIDI_MODE        = True          # True = MIDI drives string switches
+MIDI_MODE        = False          # True = MIDI drives string switches
 MIDI_FILE        = "midi_files/Twinkle Twinkle Little Star (MIDI Version).mid"
 # MIDI_FILE        = "midi_files/Canon in C - stradibot-Violon.midi"
 # MIDI_FILE        = None   # None = live keyboard mode
